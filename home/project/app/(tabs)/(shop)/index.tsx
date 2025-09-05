@@ -59,8 +59,8 @@ export default function ShopScreen() {
 
   const handleCategoryPress = (categoryKey: string) => {
     console.log('Navigating to category:', categoryKey);
-    // Use the correct route path for nested navigation
-    router.push(`/category/${categoryKey}` as any);
+    // Use the correct route path for nested navigation within (shop) group
+    router.push(`/(tabs)/(shop)/category/${categoryKey}`);
   };
 
   if (loading) {

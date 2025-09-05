@@ -72,8 +72,8 @@ export default function CategoryScreen() {
 
   const handleProductPress = (productId: string) => {
     console.log('Navigating to product:', productId);
-    // Use relative navigation from current route
-    router.push(`/product/${productId}` as any);
+    // Use the correct route path for nested navigation within (shop) group
+    router.push(`/(tabs)/(shop)/product/${productId}`);
   };
 
   const formatPrice = (price: number, currency: string) => {
