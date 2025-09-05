@@ -5,16 +5,44 @@ export default function AccountLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false,
+        headerStyle: {
+          backgroundColor: theme.colors.black,
+        },
+        headerTintColor: theme.colors.white,
+        headerTitleStyle: {
+          fontWeight: "600",
+        },
+        headerShadowVisible: false,
         contentStyle: {
           backgroundColor: theme.colors.black,
         },
       }}
     >
-      <Stack.Screen name="index" />
-      <Stack.Screen name="orders" />
-      <Stack.Screen name="addresses" />
-      <Stack.Screen name="settings" />
+      <Stack.Screen 
+        name="index" 
+        options={{ 
+          title: "Account",
+          headerTitleAlign: "center",
+        }} 
+      />
+      <Stack.Screen 
+        name="orders" 
+        options={{ 
+          title: "Orders",
+        }} 
+      />
+      <Stack.Screen 
+        name="addresses" 
+        options={{ 
+          title: "Addresses",
+        }} 
+      />
+      <Stack.Screen 
+        name="settings" 
+        options={{ 
+          title: "Settings",
+        }} 
+      />
     </Stack>
   );
 }
