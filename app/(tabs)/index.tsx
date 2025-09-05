@@ -16,12 +16,14 @@ import { ChevronRight, Calendar, Tag } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { ref, get } from "firebase/database";
 import { database } from "@/config/firebase";
+import { useRouter } from "expo-router";
 
 const { width: screenWidth } = Dimensions.get("window");
 
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   
   const { data: announcements } = useQuery({
     queryKey: ["announcements"],
@@ -80,7 +82,7 @@ export default function HomeScreen() {
             <Text style={styles.heroSubtitle}>Pure Performance Redefined</Text>
             <TouchableOpacity 
               style={styles.heroButton}
-              onPress={() => {}}
+              onPress={() => router.push('/f300-explorer')}
             >
               <Text style={styles.heroButtonText}>EXPLORE</Text>
             </TouchableOpacity>

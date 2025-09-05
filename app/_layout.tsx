@@ -27,6 +27,10 @@ function RootLayoutNav() {
     }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="f300-explorer" options={{ 
+        animation: "slide_from_right",
+        headerShown: false 
+      }} />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
     </Stack>
   );

@@ -162,7 +162,10 @@ export default function ShopScreen() {
             <Text style={styles.featuredDescription}>
               Experience pure racing performance with our flagship single-seater
             </Text>
-            <TouchableOpacity style={styles.featuredButton}>
+            <TouchableOpacity 
+              style={styles.featuredButton}
+              onPress={() => router.push('/f300-explorer')}
+            >
               <Text style={styles.featuredButtonText}>LEARN MORE</Text>
             </TouchableOpacity>
           </View>
