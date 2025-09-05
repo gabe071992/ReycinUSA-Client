@@ -6,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
-import { useRouter, Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { app } from '@/config/firebase';
 import { Package, Car, Wrench, Shield, FileText } from 'lucide-react-native';
@@ -61,8 +61,8 @@ export default function ShopScreen() {
   const handleCategoryPress = (categoryKey: string) => {
     console.log('Button pressed for category:', categoryKey);
     
-    // Use relative path within the same route group
-    router.push(`/category/${categoryKey}`);
+    // Use correct path within the shop route group
+    router.push(`/category/${categoryKey}` as any);
   };
 
   if (loading) {

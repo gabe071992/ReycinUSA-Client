@@ -73,7 +73,7 @@ export default function CategoryScreen() {
   const handleProductPress = (productId: string) => {
     console.log('Navigating to product:', productId);
     // Use relative path within the same route group
-    router.push(`/product/${productId}`);
+    router.push(`/product/${productId}` as any);
   };
 
   const formatPrice = (price: number, currency: string) => {
