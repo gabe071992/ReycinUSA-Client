@@ -33,16 +33,19 @@ export default function CategoryScreen() {
   const [categoryName, setCategoryName] = useState('');
 
   useEffect(() => {
+    if (!category) return;
+    
     const database = getDatabase(app);
     
-    // Fetch category name
-    const categoryRef = ref(database, `reycinUSA/catalog/categories/${category}`);
-    onValue(categoryRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setCategoryName(data.name);
-      }
-    });
+    // Set category name from static mapping
+    const categoryNames: Record<string, string> = {
+      vehicles: 'Vehicles',
+      parts: 'Parts', 
+      services: 'Services',
+      warranties: 'Warranties',
+      insurance: 'Insurance'
+    };
+    setCategoryName(categoryNames[category] || category);
 
     // Fetch products for this category
     const productsRef = ref(database, 'reycinUSA/catalog/products');
@@ -55,12 +58,21 @@ export default function CategoryScreen() {
         const filteredProducts: Record<string, Product> = {};
         Object.entries(data).forEach(([key, product]) => {
           const prod = product as Product;
+          console.log(`Checking product ${key}:`, prod);
+          console.log(`Product category: '${prod.category}', Looking for: '${category}'`);
+          console.log(`Product active: ${prod.active}`);
+          
+          // Check if product matches category and is active
           if (prod.category === category && prod.active !== false) {
             filteredProducts[key] = prod;
+            console.log(`Added product ${key} to filtered results`);
           }
         });
         console.log('Filtered products for category', category, ':', filteredProducts);
+        console.log('Number of filtered products:', Object.keys(filteredProducts).length);
         setProducts(filteredProducts);
+      } else {
+        console.log('No products data received from Firebase');
       }
       setLoading(false);
     }, (error) => {

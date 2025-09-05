@@ -43,18 +43,41 @@ export default function ShopScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Since categories don't exist in database, create them statically
+    // but also check if products exist to verify database connection
     const database = getDatabase(app);
-    const categoriesRef = ref(database, 'reycinUSA/catalog/categories');
+    const productsRef = ref(database, 'reycinUSA/catalog/products');
 
-    const unsubscribe = onValue(categoriesRef, (snapshot) => {
+    const unsubscribe = onValue(productsRef, (snapshot) => {
       const data = snapshot.val();
-      console.log('Categories data from Firebase:', data);
+      console.log('Products data from Firebase:', data);
+      
       if (data) {
-        setCategories(data);
+        // Create categories based on products found
+        const foundCategories = new Set<string>();
+        Object.values(data).forEach((product: any) => {
+          if (product.category) {
+            foundCategories.add(product.category);
+          }
+        });
+        
+        // Create category structure
+        const categoryData: Categories = {
+          vehicles: { name: 'Vehicles', order: 1 },
+          parts: { name: 'Parts', order: 2 },
+          services: { name: 'Services', order: 3 },
+          warranties: { name: 'Warranties', order: 4 },
+          insurance: { name: 'Insurance', order: 5 },
+        };
+        
+        console.log('Found categories in products:', Array.from(foundCategories));
+        setCategories(categoryData);
+      } else {
+        console.log('No products found in database');
       }
       setLoading(false);
     }, (error) => {
-      console.error('Error fetching categories:', error);
+      console.error('Error fetching products:', error);
       setLoading(false);
     });
 
