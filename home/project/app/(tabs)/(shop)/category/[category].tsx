@@ -72,7 +72,8 @@ export default function CategoryScreen() {
 
   const handleProductPress = (productId: string) => {
     console.log('Navigating to product:', productId);
-    router.push(`/(tabs)/(shop)/product/${productId}`);
+    // Use relative navigation from current route
+    router.push(`/product/${productId}` as any);
   };
 
   const formatPrice = (price: number, currency: string) => {

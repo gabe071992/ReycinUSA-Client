@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getDatabase, ref, onValue } from 'firebase/database';
@@ -60,28 +59,29 @@ export default function ShopScreen() {
 
   const handleCategoryPress = (categoryKey: string) => {
     console.log('Navigating to category:', categoryKey);
-    router.push(`/(tabs)/(shop)/category/${categoryKey}`);
+    // Use the correct route path for nested navigation
+    router.push(`/category/${categoryKey}` as any);
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FFFFFF" />
           <Text style={styles.loadingText}>Loading catalog...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (!categories) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>No categories available</Text>
           <Text style={styles.errorSubtext}>Please check your connection</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -90,7 +90,7 @@ export default function ShopScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Shop</Text>
         <Text style={styles.subtitle}>Browse our catalog</Text>
@@ -114,7 +114,7 @@ export default function ShopScreen() {
           })}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
