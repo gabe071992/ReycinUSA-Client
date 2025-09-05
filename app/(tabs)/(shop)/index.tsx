@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,23 +6,65 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-} from "react-native";
-import { theme } from "@/constants/theme";
-import { ShoppingBag, Car, Wrench, Shield, FileText, CreditCard } from "lucide-react-native";
-import { router } from "expo-router";
-import { useCart } from "@/providers/CartProvider";
+  ActivityIndicator,
+} from 'react-native';
+import { theme } from '@/constants/theme';
+import { ShoppingBag, Car, Wrench, Shield, FileText, Package } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { useCart } from '@/providers/CartProvider';
+import { getDatabase, ref, onValue } from 'firebase/database';
+import { app } from '@/config/firebase';
 
-const categories = [
-  { id: "vehicles", name: "Vehicles", icon: Car, color: "#FF6B6B" },
-  { id: "parts", name: "Parts", icon: Wrench, color: "#4ECDC4" },
-  { id: "services", name: "Services", icon: ShoppingBag, color: "#45B7D1" },
-  { id: "warranties", name: "Warranties", icon: Shield, color: "#96CEB4" },
-  { id: "insurance", name: "Insurance", icon: FileText, color: "#FFEAA7" },
-];
+interface Category {
+  name: string;
+  order: number;
+}
+
+interface Categories {
+  vehicles: Category;
+  parts: Category;
+  services: Category;
+  warranties: Category;
+  insurance: Category;
+}
+
+const categoryIcons = {
+  vehicles: Car,
+  parts: Package,
+  services: Wrench,
+  warranties: Shield,
+  insurance: FileText,
+};
 
 export default function ShopScreen() {
   const { getItemCount } = useCart();
   const cartCount = getItemCount();
+  const [categories, setCategories] = useState<Categories | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const database = getDatabase(app);
+    const categoriesRef = ref(database, 'reycinUSA/catalog/categories');
+
+    const unsubscribe = onValue(categoriesRef, (snapshot) => {
+      const data = snapshot.val();
+      console.log('Categories data from Firebase:', data);
+      if (data) {
+        setCategories(data);
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching categories:', error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleCategoryPress = (categoryKey: string) => {
+    console.log('Button pressed for category:', categoryKey);
+    router.push(`/(tabs)/(shop)/category/${categoryKey}` as any);
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -45,23 +87,38 @@ export default function ShopScreen() {
       {/* Categories Grid */}
       <View style={styles.categoriesSection}>
         <Text style={styles.sectionTitle}>Categories</Text>
-        <View style={styles.categoriesGrid}>
-          {categories.map((category) => {
-            const Icon = category.icon;
-            return (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryCard}
-                onPress={() => {}}
-              >
-                <View style={[styles.categoryIcon, { backgroundColor: theme.colors.darkGray }]}>
-                  <Icon size={32} color={theme.colors.white} strokeWidth={1.5} />
-                </View>
-                <Text style={styles.categoryName}>{category.name}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.white} />
+            <Text style={styles.loadingText}>Loading catalog...</Text>
+          </View>
+        ) : !categories ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>No categories available</Text>
+            <Text style={styles.errorSubtext}>Please check your connection</Text>
+          </View>
+        ) : (
+          <View style={styles.categoriesGrid}>
+            {Object.entries(categories)
+              .sort(([, a], [, b]) => a.order - b.order)
+              .map(([key, category]) => {
+                const Icon = categoryIcons[key as keyof typeof categoryIcons] || Package;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={styles.categoryCard}
+                    onPress={() => handleCategoryPress(key)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.categoryIcon, { backgroundColor: theme.colors.darkGray }]}>
+                      <Icon size={32} color={theme.colors.white} strokeWidth={1.5} />
+                    </View>
+                    <Text style={styles.categoryName}>{category.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+          </View>
+        )}
       </View>
 
       {/* Featured Section */}
@@ -263,5 +320,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textGray,
     lineHeight: 20,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    color: theme.colors.white,
+    marginTop: 10,
+    fontSize: 14,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  errorText: {
+    color: theme.colors.white,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  errorSubtext: {
+    color: theme.colors.textGray,
+    fontSize: 14,
+    marginTop: 5,
   },
 });
