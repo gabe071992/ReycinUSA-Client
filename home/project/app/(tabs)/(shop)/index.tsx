@@ -61,8 +61,8 @@ export default function ShopScreen() {
   const handleCategoryPress = (categoryKey: string) => {
     console.log('Button pressed for category:', categoryKey);
     
-    // Remove the alert and try the simplest navigation
-    router.push(`/shop/category/${categoryKey}` as any);
+    // Use the correct route path for nested navigation within (shop) group
+    router.push(`/(tabs)/(shop)/category/${categoryKey}`);
   };
 
   if (loading) {
