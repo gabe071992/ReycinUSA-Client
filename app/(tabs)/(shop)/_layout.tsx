@@ -5,50 +5,17 @@ export default function ShopLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: {
-          backgroundColor: theme.colors.black,
-        },
-        headerTintColor: theme.colors.white,
-        headerTitleStyle: {
-          fontWeight: "600",
-        },
-        headerShadowVisible: false,
+        headerShown: false,
         contentStyle: {
           backgroundColor: theme.colors.black,
         },
       }}
     >
-      <Stack.Screen 
-        name="index" 
-        options={{ 
-          title: "Shop",
-          headerTitleAlign: "center",
-        }} 
-      />
-      <Stack.Screen 
-        name="category/[id]" 
-        options={{ 
-          title: "Category",
-        }} 
-      />
-      <Stack.Screen 
-        name="product/[id]" 
-        options={{ 
-          title: "Product",
-        }} 
-      />
-      <Stack.Screen 
-        name="cart" 
-        options={{ 
-          title: "Cart",
-        }} 
-      />
-      <Stack.Screen 
-        name="checkout" 
-        options={{ 
-          title: "Checkout",
-        }} 
-      />
+      <Stack.Screen name="index" />
+      <Stack.Screen name="category/[id]" />
+      <Stack.Screen name="product/[id]" />
+      <Stack.Screen name="cart" />
+      <Stack.Screen name="checkout" />
     </Stack>
   );
 }
