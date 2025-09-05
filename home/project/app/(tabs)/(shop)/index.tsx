@@ -6,8 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Link } from 'expo-router';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { app } from '@/config/firebase';
 import { Package, Car, Wrench, Shield, FileText } from 'lucide-react-native';
@@ -58,9 +59,10 @@ export default function ShopScreen() {
   }, []);
 
   const handleCategoryPress = (categoryKey: string) => {
-    console.log('Navigating to category:', categoryKey);
-    // Use the correct route path for nested navigation within (shop) group
-    router.push(`/(tabs)/(shop)/category/${categoryKey}`);
+    console.log('Button pressed for category:', categoryKey);
+    
+    // Remove the alert and try the simplest navigation
+    router.push(`/shop/category/${categoryKey}` as any);
   };
 
   if (loading) {
