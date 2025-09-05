@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Reycin USA Ultra-Sleek Mobile App",
-    "slug": "reysin-usa-ultra-sleek-mobile-app",
+    "name": "Reycin USA Client",
+    "slug": "reycin-usa-ultra-sleek-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.rork.reysin-usa-ultra-sleek-mobile-app"
+      "bundleIdentifier": "app.rork.reycin-usa-ultra-sleek-mobile-app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.reysin-usa-ultra-sleek-mobile-app"
+      "package": "app.rork.reycin-usa-ultra-sleek-mobile-app"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
