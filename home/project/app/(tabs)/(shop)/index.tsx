@@ -61,8 +61,8 @@ export default function ShopScreen() {
   const handleCategoryPress = (categoryKey: string) => {
     console.log('Button pressed for category:', categoryKey);
     
-    // Use correct path within the shop route group
-    router.push(`/category/${categoryKey}` as any);
+    // Use relative path within the shop route group
+    router.push(`/(tabs)/(shop)/category/${categoryKey}` as any);
   };
 
   if (loading) {

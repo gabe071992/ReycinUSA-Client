@@ -14,9 +14,6 @@ export default function ShopLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: 'Shop' }} />
-      <Stack.Screen name="category/[category]" options={{ title: 'Category' }} />
-      <Stack.Screen name="product/[productId]" options={{ title: 'Product Details' }} />
-      <Stack.Screen name="cart" options={{ title: 'Cart' }} />
     </Stack>
   );
 }
