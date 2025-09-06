@@ -79,7 +79,7 @@ export default function HomeScreen() {
           />
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>REYCIN F300</Text>
-            <Text style={styles.heroSubtitle}>Pure Performance Redefined</Text>
+            <Text style={styles.heroSubtitle}>Mechanical Excellence</Text>
             <TouchableOpacity 
               style={styles.heroButton}
               onPress={() => router.push('/f300-explorer')}
