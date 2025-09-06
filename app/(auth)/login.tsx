@@ -22,6 +22,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const glowAnim = new Animated.Value(0);
 
   React.useEffect(() => {
@@ -46,8 +47,8 @@ export default function LoginScreen() {
     
     setLoading(true);
     try {
-      await signIn(email, password);
-      router.replace("/(tabs)");
+      await signIn(email, password, rememberMe);
+      router.replace("/(tabs)/(home)");
     } catch (err) {
       console.error("Login failed:", err);
     } finally {
@@ -104,6 +105,17 @@ export default function LoginScreen() {
           {error && (
             <Text style={styles.error}>{error}</Text>
           )}
+
+          <TouchableOpacity
+            style={styles.rememberMeContainer}
+            onPress={() => setRememberMe(!rememberMe)}
+            testID="remember-me-checkbox"
+          >
+            <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+              {rememberMe && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.rememberMeText}>Remember me</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.button}
@@ -209,5 +221,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: theme.spacing.sm,
     textAlign: "center",
+  },
+  rememberMeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: theme.spacing.md,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: theme.colors.borderGray,
+    borderRadius: 4,
+    marginRight: theme.spacing.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.white,
+  },
+  checkmark: {
+    color: theme.colors.black,
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  rememberMeText: {
+    color: theme.colors.textGray,
+    fontSize: 14,
   },
 });

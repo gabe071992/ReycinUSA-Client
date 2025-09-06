@@ -42,8 +42,26 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        // Check if user should be remembered
+        const shouldRemember = await AsyncStorage.getItem("rememberMe");
+        setRememberMe(shouldRemember === "true");
+        
+        // If not remembering, clear any stored auth
+        if (shouldRemember !== "true") {
+          await AsyncStorage.removeItem("authUser");
+        }
+      } catch (error) {
+        console.error("Error initializing auth:", error);
+      }
+    };
+    
+    initializeAuth();
+    
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
@@ -67,11 +85,18 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           setProfile(newProfile);
         }
         
-        // Store auth state
-        await AsyncStorage.setItem("authUser", JSON.stringify(firebaseUser.uid));
+        // Store auth state only if remember me is enabled
+        const shouldRemember = await AsyncStorage.getItem("rememberMe");
+        if (shouldRemember === "true") {
+          await AsyncStorage.setItem("authUser", JSON.stringify(firebaseUser.uid));
+        }
       } else {
         setProfile(null);
-        await AsyncStorage.removeItem("authUser");
+        // Only clear auth user if not remembering
+        const shouldRemember = await AsyncStorage.getItem("rememberMe");
+        if (shouldRemember !== "true") {
+          await AsyncStorage.removeItem("authUser");
+        }
       }
       
       setLoading(false);
@@ -80,10 +105,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return unsubscribe;
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, remember: boolean = false) => {
     try {
       setError(null);
       const credential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Store remember me preference
+      await AsyncStorage.setItem("rememberMe", remember.toString());
+      setRememberMe(remember);
+      
+      if (remember) {
+        await AsyncStorage.setItem("authUser", JSON.stringify(credential.user.uid));
+      } else {
+        await AsyncStorage.removeItem("authUser");
+      }
+      
       return credential.user;
     } catch (err: any) {
       setError(err.message);
@@ -120,6 +156,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
+      // Clear remember me and stored auth
+      await AsyncStorage.removeItem("rememberMe");
+      await AsyncStorage.removeItem("authUser");
+      setRememberMe(false);
       router.replace("/(auth)/login");
     } catch (err: any) {
       setError(err.message);
@@ -156,6 +196,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     profile,
     loading,
     error,
+    rememberMe,
     signIn,
     signUp,
     signOut,

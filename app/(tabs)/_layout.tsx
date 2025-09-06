@@ -69,7 +69,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="(home)"
         options={{
           title: "F300",
           tabBarIcon: (props) => <TabBarIcon icon={Home} {...props} />,
