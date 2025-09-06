@@ -74,7 +74,7 @@ export default function HomeScreen() {
             style={styles.heroGradient}
           />
           <Image
-            source={{ uri: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=1200&h=800&fit=crop" }}
+            source={{ uri: "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/29macqsbskgyov1q3fk5p" }}
             style={styles.heroImage}
           />
           <View style={styles.heroContent}>
