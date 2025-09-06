@@ -172,30 +172,7 @@ export default function ShopScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Promotions */}
-      <View style={styles.promotionsSection}>
-        <Text style={styles.sectionTitle}>Special Offers</Text>
-        
-        <View style={styles.promotionCard}>
-          <View style={styles.promotionBadge}>
-            <Text style={styles.promotionBadgeText}>20% OFF</Text>
-          </View>
-          <Text style={styles.promotionTitle}>Track Day Package</Text>
-          <Text style={styles.promotionDescription}>
-            Complete track support with telemetry and crew
-          </Text>
-        </View>
-        
-        <View style={styles.promotionCard}>
-          <View style={styles.promotionBadge}>
-            <Text style={styles.promotionBadgeText}>LIMITED</Text>
-          </View>
-          <Text style={styles.promotionTitle}>Extended Warranty</Text>
-          <Text style={styles.promotionDescription}>
-            Protect your investment with comprehensive coverage
-          </Text>
-        </View>
-      </View>
+
     </ScrollView>
   );
 }
@@ -311,42 +288,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.5,
   },
-  promotionsSection: {
-    padding: theme.spacing.lg,
-  },
-  promotionCard: {
-    backgroundColor: theme.colors.darkGray,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGray,
-  },
-  promotionBadge: {
-    backgroundColor: theme.colors.white,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: theme.borderRadius.sm,
-    alignSelf: "flex-start",
-    marginBottom: theme.spacing.sm,
-  },
-  promotionBadgeText: {
-    color: theme.colors.black,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  promotionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: theme.colors.white,
-    marginBottom: 4,
-  },
-  promotionDescription: {
-    fontSize: 14,
-    color: theme.colors.textGray,
-    lineHeight: 20,
-  },
+
   loadingContainer: {
     alignItems: 'center',
     paddingVertical: 40,
