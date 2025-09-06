@@ -6,12 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { app } from '@/config/firebase';
-import { Package, Car, Wrench, Shield, FileText } from 'lucide-react-native';
+import { Package, Car, Wrench, Shield, FileText, ArrowRight } from 'lucide-react-native';
 
 interface Category {
   name: string;
@@ -65,6 +65,10 @@ export default function ShopScreen() {
     router.push(`/(tabs)/(shop)/category/${categoryKey}` as any);
   };
 
+  const handleF300Press = () => {
+    router.push('/f300-explorer' as any);
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -97,6 +101,7 @@ export default function ShopScreen() {
         <Text style={styles.title}>Shop</Text>
         <Text style={styles.subtitle}>Browse our catalog</Text>
         
+        {/* Categories Grid */}
         <View style={styles.grid}>
           {sortedCategories.map(([key, category]) => {
             const Icon = categoryIcons[key as keyof typeof categoryIcons] || Package;
@@ -114,6 +119,32 @@ export default function ShopScreen() {
               </TouchableOpacity>
             );
           })}
+        </View>
+
+        {/* Featured F300 Section */}
+        <View style={styles.featuredSection}>
+          <Text style={styles.featuredTitle}>Featured Vehicle</Text>
+          <TouchableOpacity 
+            style={styles.featuredCard}
+            onPress={handleF300Press}
+            activeOpacity={0.8}
+          >
+            <Image 
+              source={{ uri: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2069&q=80' }}
+              style={styles.featuredImage}
+            />
+            <View style={styles.featuredOverlay}>
+              <View style={styles.featuredContent}>
+                <Text style={styles.featuredVehicleTitle}>Reycin F300</Text>
+                <Text style={styles.featuredSlogan}>&ldquo;Four cylinders never sounded this good&rdquo;</Text>
+                <Text style={styles.featuredDescription}>High-performance track kart designed for both track and light street use</Text>
+                <View style={styles.featuredButton}>
+                  <Text style={styles.featuredButtonText}>Learn More</Text>
+                  <ArrowRight size={16} color="#000000" />
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -191,5 +222,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  featuredSection: {
+    marginTop: 30,
+  },
+  featuredTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 15,
+  },
+  featuredCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    height: 300,
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  featuredOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+    padding: 20,
+  },
+  featuredContent: {
+    alignItems: 'flex-start',
+  },
+  featuredVehicleTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  featuredSlogan: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  featuredDescription: {
+    fontSize: 14,
+    color: '#B0B0B0',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  featuredButton: {
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  featuredButtonText: {
+    color: '#000000',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

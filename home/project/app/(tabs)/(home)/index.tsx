@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getDatabase, ref, onValue } from 'firebase/database';
@@ -121,16 +122,22 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Hero Section */}
-        <View style={styles.heroSection}>
-          <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>Reycin USA</Text>
-            <Text style={styles.heroSubtitle}>Precision Engineering for Racing Excellence</Text>
-            <TouchableOpacity style={styles.heroButton} onPress={handleExploreF300}>
-              <Text style={styles.heroButtonText}>Explore F300</Text>
-              <ArrowRight size={16} color="#000000" />
-            </TouchableOpacity>
+        <ImageBackground 
+          source={{ uri: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2069&q=80' }}
+          style={styles.heroSection}
+          imageStyle={styles.heroImage}
+        >
+          <View style={styles.heroOverlay}>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroTitle}>Reycin USA</Text>
+              <Text style={styles.heroSubtitle}>Precision Engineering for Racing Excellence</Text>
+              <TouchableOpacity style={styles.heroButton} onPress={handleExploreF300}>
+                <Text style={styles.heroButtonText}>Explore F300</Text>
+                <ArrowRight size={16} color="#000000" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </ImageBackground>
 
         {/* Announcements Section */}
         {sortedAnnouncements.length > 0 && (
@@ -244,10 +251,19 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     height: 300,
-    backgroundColor: '#141414',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
+  },
+  heroImage: {
+    resizeMode: 'cover',
+  },
+  heroOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
   },
   heroContent: {
     alignItems: 'center',
