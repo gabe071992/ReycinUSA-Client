@@ -79,7 +79,7 @@ export default function OBDScreen() {
       <View style={styles.actionsGrid}>
         <TouchableOpacity 
           style={styles.actionCard}
-          onPress={() => {}}
+          onPress={() => router.push('/(tabs)/(obd)/live-data')}
         >
           <Activity size={32} color={theme.colors.white} strokeWidth={1.5} />
           <Text style={styles.actionTitle}>Live Data</Text>

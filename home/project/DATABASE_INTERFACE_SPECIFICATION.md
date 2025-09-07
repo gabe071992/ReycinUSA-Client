@@ -87,7 +87,9 @@ interface Category {
   "parts": { "name": "Parts", "order": 2 },
   "services": { "name": "Services", "order": 3 },
   "warranties": { "name": "Warranties", "order": 4 },
-  "insurance": { "name": "Insurance", "order": 5 }
+  "insurance": { "name": "Insurance", "order": 5 },
+  "tools": { "name": "Tools", "order": 6 },
+  "tracks": { "name": "Tracks", "order": 7 }
 }
 ```
 
@@ -232,6 +234,128 @@ interface InsuranceProduct {
   "premiumMo": 199,
   "currency": "USD",
   "termsUrl": "https://partner.com/terms",
+  "active": true
+}
+```
+
+#### Tools Products
+```typescript
+interface ToolProduct {
+  category: "tools";
+  name: string;
+  description: string;
+  brand: string;
+  type: "diagnostic" | "mechanical" | "electrical" | "specialty";
+  price: number;
+  currency: "USD";
+  stock: number;
+  sku: string;
+  media: string[];
+  specifications?: {
+    weight?: string;
+    dimensions?: string;
+    material?: string;
+    warranty?: string;
+  };
+  active: boolean;
+}
+
+// Example Push Format:
+{
+  "category": "tools",
+  "name": "OBD-II Diagnostic Scanner Pro",
+  "description": "Professional-grade diagnostic tool with live data streaming",
+  "brand": "Reycin Tools",
+  "type": "diagnostic",
+  "price": 299.99,
+  "currency": "USD",
+  "stock": 15,
+  "sku": "RT-OBD-PRO-01",
+  "media": ["https://cdn.reycin.com/tools/obd_scanner.jpg"],
+  "specifications": {
+    "weight": "450g",
+    "dimensions": "15x8x3 cm",
+    "material": "ABS Plastic",
+    "warranty": "2 years"
+  },
+  "active": true
+}
+```
+
+#### Tracks Products
+```typescript
+interface TrackProduct {
+  category: "tracks";
+  name: string;
+  location: {
+    city: string;
+    state: string;
+    country: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+  };
+  type: "circuit" | "drag" | "oval" | "rally" | "karting";
+  length_km: number;
+  configuration: string;
+  surface: "asphalt" | "concrete" | "dirt" | "mixed";
+  facilities: string[];
+  pricing: {
+    hourly: number;
+    daily: number;
+    membership?: number;
+  };
+  currency: "USD";
+  media: string[];
+  availability: {
+    monday: boolean;
+    tuesday: boolean;
+    wednesday: boolean;
+    thursday: boolean;
+    friday: boolean;
+    saturday: boolean;
+    sunday: boolean;
+  };
+  requirements: string[];
+  active: boolean;
+}
+
+// Example Push Format:
+{
+  "category": "tracks",
+  "name": "Reycin Performance Circuit",
+  "location": {
+    "city": "Detroit",
+    "state": "MI",
+    "country": "USA",
+    "coordinates": {
+      "lat": 42.3314,
+      "lng": -83.0458
+    }
+  },
+  "type": "circuit",
+  "length_km": 3.2,
+  "configuration": "Grand Prix Layout",
+  "surface": "asphalt",
+  "facilities": ["Pit Lane", "Garage Rental", "Timing System", "Medical Center", "Fuel Station"],
+  "pricing": {
+    "hourly": 500,
+    "daily": 3500,
+    "membership": 5000
+  },
+  "currency": "USD",
+  "media": ["https://cdn.reycin.com/tracks/circuit_aerial.jpg"],
+  "availability": {
+    "monday": true,
+    "tuesday": true,
+    "wednesday": true,
+    "thursday": true,
+    "friday": true,
+    "saturday": true,
+    "sunday": false
+  },
+  "requirements": ["Valid Driver License", "Track Insurance", "Safety Equipment"],
   "active": true
 }
 ```
@@ -569,7 +693,9 @@ export async function initializeDatabase() {
     parts: { name: "Parts", order: 2 },
     services: { name: "Services", order: 3 },
     warranties: { name: "Warranties", order: 4 },
-    insurance: { name: "Insurance", order: 5 }
+    insurance: { name: "Insurance", order: 5 },
+    tools: { name: "Tools", order: 6 },
+    tracks: { name: "Tracks", order: 7 }
   });
 
   // Sample products

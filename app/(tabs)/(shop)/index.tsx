@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { theme } from '@/constants/theme';
-import { ShoppingBag, Car, Wrench, Shield, FileText, Package } from 'lucide-react-native';
+import { ShoppingBag, Car, Wrench, Shield, FileText, Package, Hammer, Route } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCart } from '@/providers/CartProvider';
 import { getDatabase, ref, onValue } from 'firebase/database';
@@ -26,6 +26,8 @@ interface Categories {
   services: Category;
   warranties: Category;
   insurance: Category;
+  tools: Category;
+  tracks: Category;
 }
 
 const categoryIcons = {
@@ -34,6 +36,8 @@ const categoryIcons = {
   services: Wrench,
   warranties: Shield,
   insurance: FileText,
+  tools: Hammer,
+  tracks: Route,
 };
 
 export default function ShopScreen() {
@@ -68,6 +72,8 @@ export default function ShopScreen() {
           services: { name: 'Services', order: 3 },
           warranties: { name: 'Warranties', order: 4 },
           insurance: { name: 'Insurance', order: 5 },
+          tools: { name: 'Tools', order: 6 },
+          tracks: { name: 'Tracks', order: 7 },
         };
         
         console.log('Found categories in products:', Array.from(foundCategories));
@@ -153,7 +159,7 @@ export default function ShopScreen() {
           onPress={() => {}}
         >
           <Image
-            source={{ uri: "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/x7gx4pem64fsluzau0nfk" }}
+            source={{ uri: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800" }}
             style={styles.featuredImage}
           />
           <View style={styles.featuredContent}>
