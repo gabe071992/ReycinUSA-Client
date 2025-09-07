@@ -153,7 +153,7 @@ export default function ShopScreen() {
           onPress={() => {}}
         >
           <Image
-            source={{ uri: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&h=600&fit=crop" }}
+            source={{ uri: "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/x7gx4pem64fsluzau0nfk" }}
             style={styles.featuredImage}
           />
           <View style={styles.featuredContent}>
