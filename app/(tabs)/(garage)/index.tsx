@@ -82,7 +82,7 @@ export default function GarageScreen() {
               onPress={() => {}}
             >
               <Image
-                source={{ uri: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&h=600&fit=crop" }}
+                source={{ uri: vehicle.photo || "https://ReycinTuner.b-cdn.net/C3725DEC-FF03-474B-AC24-868F9C9392BD.png" }}
                 style={styles.vehicleImage}
               />
               <View style={styles.vehicleContent}>
@@ -347,6 +347,7 @@ export default function GarageScreen() {
         color: vehicleForm.color || '',
         purchaseDate: vehicleForm.purchaseDate ? new Date(vehicleForm.purchaseDate).getTime() : Date.now(),
         warrantyExpiry: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year from now
+        photo: "https://ReycinTuner.b-cdn.net/C3725DEC-FF03-474B-AC24-868F9C9392BD.png",
       };
       
       await set(newVehicleRef, vehicleData);
