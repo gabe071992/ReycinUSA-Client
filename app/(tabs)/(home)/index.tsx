@@ -155,7 +155,7 @@ export default function HomeScreen() {
           <View style={styles.actionsGrid}>
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push('/(tabs)/(obd)')}
             >
               <Text style={styles.actionIcon}>🔧</Text>
               <Text style={styles.actionTitle}>Diagnostics</Text>
@@ -164,7 +164,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push('/(tabs)/(garage)')}
             >
               <Text style={styles.actionIcon}>🏁</Text>
               <Text style={styles.actionTitle}>Track Support</Text>
@@ -173,7 +173,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push('/(tabs)/(shop)/category/parts')}
             >
               <Text style={styles.actionIcon}>🛒</Text>
               <Text style={styles.actionTitle}>Parts</Text>
@@ -182,7 +182,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push('/(tabs)/(shop)/category/warranty')}
             >
               <Text style={styles.actionIcon}>📋</Text>
               <Text style={styles.actionTitle}>Warranty</Text>
