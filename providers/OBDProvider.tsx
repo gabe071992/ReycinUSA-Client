@@ -80,15 +80,15 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
   };
 
   const connectWebSocket = async () => {
-    const ws = new WebSocket("ws://192.168.4.1/ws"); // ESP32 AP default
+    const ws = new WebSocket("ws://192.168.4.1:81"); // ESP32 WebSocket server on port 81
     
     ws.onopen = () => {
       console.log("WebSocket connected");
       setConnectionStatus("connected");
       wsRef.current = ws;
       
-      // Send initial handshake
-      ws.send(JSON.stringify({ type: "connect", profile: "default" }));
+      // Send initial handshake - ESP32 firmware expects 'command' field
+      ws.send(JSON.stringify({ command: "get_telemetry" }));
     };
     
     ws.onmessage = (event) => {
@@ -152,15 +152,21 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
   };
 
   const handleMessage = (msg: any) => {
+    console.log("Received OBD message:", msg);
+    
     switch (msg.type) {
-      case "hello":
-        setFirmwareVersion(msg.fw);
-        startPolling();
+      case "connected":
+        console.log("ESP32 connected, version:", msg.version);
+        setFirmwareVersion(msg.version);
+        // Start requesting telemetry data
+        if (wsRef.current) {
+          wsRef.current.send(JSON.stringify({ command: "set_poll_rate", rate: 10 }));
+        }
         break;
         
       case "telemetry":
         const data: TelemetryData = {
-          t: msg.t || Date.now(),
+          t: msg.timestamp || Date.now(),
           rpm: msg.rpm,
           ect_c: msg.ect_c,
           iat_c: msg.iat_c,
@@ -181,17 +187,23 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
         }
         break;
         
-      case "dtc":
-        setActiveDTCs(msg.active || []);
-        setPendingDTCs(msg.pending || []);
+      case "dtc_codes":
+        const dtcs = msg.codes?.map((code: string) => ({ code, description: undefined })) || [];
+        setActiveDTCs(dtcs);
         break;
         
-      case "ack":
-        console.log("Command acknowledged:", msg.id);
+      case "raw_response":
+        console.log("Raw OBD response:", msg.command, msg.response);
         break;
         
-      case "error":
-        console.error("OBD Error:", msg.code, msg.detail);
+      case "dtc_cleared":
+        console.log("DTCs cleared successfully");
+        setActiveDTCs([]);
+        setPendingDTCs([]);
+        break;
+        
+      default:
+        console.log("Unknown message type:", msg.type, msg);
         break;
     }
   };

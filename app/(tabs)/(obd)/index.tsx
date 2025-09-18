@@ -10,10 +10,106 @@ import { theme } from "@/constants/theme";
 import { Wifi, Bluetooth, Usb, Activity, AlertTriangle, Settings, FileText, Cpu } from "lucide-react-native";
 import { router } from "expo-router";
 import { useOBD } from "@/providers/OBDProvider";
+import { Alert } from "react-native";
 import { Platform } from "react-native";
 
 export default function OBDScreen() {
-  const { connectionStatus, connectionType, telemetry, activeDTCs } = useOBD();
+  const { connectionStatus, connectionType, telemetry, activeDTCs, connect, disconnect } = useOBD();
+
+  const handleConnectDevice = async () => {
+    if (connectionStatus === "connected") {
+      // Show options to change connection or disconnect
+      Alert.alert(
+        "Connection Options",
+        "Choose an action:",
+        [
+          {
+            text: "Disconnect",
+            style: "destructive",
+            onPress: () => disconnect()
+          },
+          {
+            text: "Change Connection",
+            onPress: () => showConnectionOptions()
+          },
+          {
+            text: "Cancel",
+            style: "cancel"
+          }
+        ]
+      );
+    } else {
+      showConnectionOptions();
+    }
+  };
+
+  const showConnectionOptions = () => {
+    const options: Array<{
+      text: string;
+      onPress?: () => void;
+      style?: "default" | "cancel" | "destructive";
+    }> = [
+      {
+        text: "Wi-Fi (ESP32)",
+        onPress: () => connectToDevice("wifi")
+      },
+      {
+        text: "Bluetooth",
+        onPress: () => connectToDevice("ble")
+      }
+    ];
+
+    // Add USB option for Android
+    if (Platform.OS === "android") {
+      options.push({
+        text: "USB-C",
+        onPress: () => connectToDevice("usb")
+      });
+    }
+
+    options.push({
+      text: "Cancel",
+      style: "cancel"
+    });
+
+    Alert.alert(
+      "Select Connection Type",
+      "Choose how to connect to your OBD device:",
+      options
+    );
+  };
+
+  const connectToDevice = async (type: "wifi" | "ble" | "usb") => {
+    try {
+      console.log(`Attempting to connect via ${type}...`);
+      
+      if (type === "wifi") {
+        Alert.alert(
+          "Wi-Fi Connection",
+          "Make sure you're connected to your ESP32's Wi-Fi network (Reycin_OBD_XXXXXX) before proceeding.",
+          [
+            {
+              text: "Cancel",
+              style: "cancel"
+            },
+            {
+              text: "Connect",
+              onPress: () => connect("wifi")
+            }
+          ]
+        );
+      } else {
+        await connect(type);
+      }
+    } catch (error) {
+      console.error(`Failed to connect via ${type}:`, error);
+      Alert.alert(
+        "Connection Failed",
+        `Unable to connect via ${type.toUpperCase()}. Please check your device and try again.`,
+        [{ text: "OK" }]
+      );
+    }
+  };
 
   const getStatusColor = () => {
     switch (connectionStatus) {
@@ -67,7 +163,7 @@ export default function OBDScreen() {
         
         <TouchableOpacity 
           style={styles.connectButton}
-          onPress={() => {}}
+          onPress={() => handleConnectDevice()}
         >
           <Text style={styles.connectButtonText}>
             {connectionStatus === "connected" ? "CHANGE CONNECTION" : "CONNECT DEVICE"}
