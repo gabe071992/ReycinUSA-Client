@@ -37,24 +37,22 @@ export default function CategoryScreen() {
     
     const database = getDatabase(app);
     
-    // Set category name from static mapping
     const categoryNames: Record<string, string> = {
       vehicles: 'Vehicles',
       parts: 'Parts', 
       services: 'Services',
       warranties: 'Warranties',
+      warranty: 'Warranties',
       insurance: 'Insurance'
     };
     setCategoryName(categoryNames[category] || category);
 
-    // Fetch products for this category
     const productsRef = ref(database, 'reycinUSA/catalog/products');
     const unsubscribe = onValue(productsRef, (snapshot) => {
       const data = snapshot.val();
       console.log('All products data:', data);
       
       if (data) {
-        // Filter products by category
         const filteredProducts: Record<string, Product> = {};
         Object.entries(data).forEach(([key, product]) => {
           const prod = product as Product;
@@ -62,7 +60,6 @@ export default function CategoryScreen() {
           console.log(`Product category: '${prod.category}', Looking for: '${category}'`);
           console.log(`Product active: ${prod.active}`);
           
-          // Check if product matches category and is active
           if (prod.category === category && prod.active !== false) {
             filteredProducts[key] = prod;
             console.log(`Added product ${key} to filtered results`);
@@ -85,7 +82,7 @@ export default function CategoryScreen() {
 
   const handleProductPress = (productId: string) => {
     console.log('Navigating to product:', productId);
-    router.push(`/(tabs)/(shop)/product/${productId}` as any);
+    router.push(`/(tabs)/shop/product/${productId}` as any);
   };
 
   const formatPrice = (price: number, currency: string) => {

@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import { theme } from "@/constants/theme";
 
-export default function ShopLayout() {
+export default function OBDLayout() {
   return (
     <Stack
       screenOptions={{
@@ -21,32 +21,14 @@ export default function ShopLayout() {
       <Stack.Screen 
         name="index" 
         options={{ 
-          title: "Shop",
+          title: "OBD Diagnostics",
           headerTitleAlign: "center",
         }} 
       />
       <Stack.Screen 
-        name="category/[id]" 
+        name="live-data" 
         options={{ 
-          title: "Category",
-        }} 
-      />
-      <Stack.Screen 
-        name="product/[id]" 
-        options={{ 
-          title: "Product",
-        }} 
-      />
-      <Stack.Screen 
-        name="cart" 
-        options={{ 
-          title: "Cart",
-        }} 
-      />
-      <Stack.Screen 
-        name="checkout" 
-        options={{ 
-          title: "Checkout",
+          title: "Live Data",
         }} 
       />
     </Stack>

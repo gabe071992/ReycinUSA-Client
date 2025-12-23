@@ -7,136 +7,27 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { theme } from "@/constants/theme";
-import { Wifi, Bluetooth, Usb, Activity, AlertTriangle, Settings, FileText, Cpu } from "lucide-react-native";
+import { Wifi, Bluetooth, Activity, AlertTriangle } from "lucide-react-native";
 import { router } from "expo-router";
 import { useOBD } from "@/providers/OBDProvider";
-import { Alert } from "react-native";
-import { Platform } from "react-native";
 
 export default function OBDScreen() {
-  const { connectionStatus, connectionType, telemetry, activeDTCs, connect, disconnect } = useOBD();
-
-  const handleConnectDevice = async () => {
-    if (connectionStatus === "connected") {
-      // Show options to change connection or disconnect
-      Alert.alert(
-        "Connection Options",
-        "Choose an action:",
-        [
-          {
-            text: "Disconnect",
-            style: "destructive",
-            onPress: () => disconnect()
-          },
-          {
-            text: "Change Connection",
-            onPress: () => showConnectionOptions()
-          },
-          {
-            text: "Cancel",
-            style: "cancel"
-          }
-        ]
-      );
-    } else {
-      showConnectionOptions();
-    }
-  };
-
-  const showConnectionOptions = () => {
-    const options: Array<{
-      text: string;
-      onPress?: () => void;
-      style?: "default" | "cancel" | "destructive";
-    }> = [
-      {
-        text: "Wi-Fi (ESP32)",
-        onPress: () => connectToDevice("wifi")
-      },
-      {
-        text: "Bluetooth",
-        onPress: () => connectToDevice("ble")
-      }
-    ];
-
-    // Add USB option for Android
-    if (Platform.OS === "android") {
-      options.push({
-        text: "USB-C",
-        onPress: () => connectToDevice("usb")
-      });
-    }
-
-    options.push({
-      text: "Cancel",
-      style: "cancel"
-    });
-
-    Alert.alert(
-      "Select Connection Type",
-      "Choose how to connect to your OBD device:",
-      options
-    );
-  };
-
-  const connectToDevice = async (type: "wifi" | "ble" | "usb") => {
-    try {
-      console.log(`Attempting to connect via ${type}...`);
-      
-      if (type === "wifi") {
-        Alert.alert(
-          "Wi-Fi Connection",
-          "Make sure you're connected to your ESP32's Wi-Fi network (Reycin_OBD_XXXXXX) before proceeding.",
-          [
-            {
-              text: "Cancel",
-              style: "cancel"
-            },
-            {
-              text: "Connect",
-              onPress: () => connect("wifi")
-            }
-          ]
-        );
-      } else {
-        await connect(type);
-      }
-    } catch (error) {
-      console.error(`Failed to connect via ${type}:`, error);
-      Alert.alert(
-        "Connection Failed",
-        `Unable to connect via ${type.toUpperCase()}. Please check your device and try again.`,
-        [{ text: "OK" }]
-      );
-    }
-  };
+  const { connectionStatus, telemetry, activeDTCs } = useOBD();
 
   const getStatusColor = () => {
     switch (connectionStatus) {
-      case "connected": return theme.colors.success;
-      case "connecting": return theme.colors.warning;
-      case "error": return theme.colors.error;
+      case "connected": return "#10B981";
+      case "connecting": return "#F59E0B";
+      case "error": return "#EF4444";
       default: return theme.colors.textGray;
     }
   };
 
-  const getConnectionIcon = () => {
-    switch (connectionType) {
-      case "wifi": return Wifi;
-      case "ble": return Bluetooth;
-      case "usb": return Usb;
-      default: return Activity;
-    }
-  };
-
-  const ConnectionIcon = getConnectionIcon();
-
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Connection Status */}
       <View style={styles.statusCard}>
         <View style={styles.statusHeader}>
-          <ConnectionIcon size={24} color={getStatusColor()} />
+          <Activity size={24} color={getStatusColor()} />
           <Text style={[styles.statusText, { color: getStatusColor() }]}>
             {connectionStatus === "connected" ? "Connected" : 
              connectionStatus === "connecting" ? "Connecting..." : 
@@ -163,7 +54,7 @@ export default function OBDScreen() {
         
         <TouchableOpacity 
           style={styles.connectButton}
-          onPress={() => handleConnectDevice()}
+          onPress={() => {}}
         >
           <Text style={styles.connectButtonText}>
             {connectionStatus === "connected" ? "CHANGE CONNECTION" : "CONNECT DEVICE"}
@@ -171,11 +62,10 @@ export default function OBDScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Quick Actions */}
       <View style={styles.actionsGrid}>
         <TouchableOpacity 
           style={styles.actionCard}
-          onPress={() => router.push('/(tabs)/(obd)/live-data')}
+          onPress={() => router.push('/(tabs)/obd/live-data' as any)}
         >
           <Activity size={32} color={theme.colors.white} strokeWidth={1.5} />
           <Text style={styles.actionTitle}>Live Data</Text>
@@ -199,27 +89,8 @@ export default function OBDScreen() {
             {activeDTCs.length > 0 ? `${activeDTCs.length} active` : "No faults"}
           </Text>
         </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => {}}
-        >
-          <Settings size={32} color={theme.colors.white} strokeWidth={1.5} />
-          <Text style={styles.actionTitle}>Actuations</Text>
-          <Text style={styles.actionDescription}>Control systems</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => {}}
-        >
-          <FileText size={32} color={theme.colors.white} strokeWidth={1.5} />
-          <Text style={styles.actionTitle}>Session Logs</Text>
-          <Text style={styles.actionDescription}>View history</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Info Section */}
       <View style={styles.infoSection}>
         <Text style={styles.infoTitle}>Compatible Devices</Text>
         <View style={styles.infoCard}>
@@ -237,16 +108,6 @@ export default function OBDScreen() {
             <Text style={styles.infoDescription}>Bluetooth Low Energy adapter</Text>
           </View>
         </View>
-        
-        {Platform.OS === "android" && (
-          <View style={styles.infoCard}>
-            <Usb size={20} color={theme.colors.textGray} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoName}>Reycin Link USB-C</Text>
-              <Text style={styles.infoDescription}>Direct USB connection</Text>
-            </View>
-          </View>
-        )}
       </View>
     </ScrollView>
   );
@@ -336,7 +197,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -4,
     right: -4,
-    backgroundColor: theme.colors.error,
+    backgroundColor: "#EF4444",
     borderRadius: 10,
     minWidth: 20,
     height: 20,

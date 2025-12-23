@@ -47,8 +47,6 @@ export default function ShopScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Since categories don't exist in database, create them statically
-    // but also check if products exist to verify database connection
     const database = getDatabase(app);
     const productsRef = ref(database, 'reycinUSA/catalog/products');
 
@@ -57,7 +55,6 @@ export default function ShopScreen() {
       console.log('Products data from Firebase:', data);
       
       if (data) {
-        // Create categories based on products found
         const foundCategories = new Set<string>();
         Object.values(data).forEach((product: any) => {
           if (product.category) {
@@ -65,7 +62,6 @@ export default function ShopScreen() {
           }
         });
         
-        // Create category structure
         const categoryData: Categories = {
           vehicles: { name: 'Vehicles', order: 1 },
           parts: { name: 'Parts', order: 2 },
@@ -92,12 +88,11 @@ export default function ShopScreen() {
 
   const handleCategoryPress = (categoryKey: string) => {
     console.log('Button pressed for category:', categoryKey);
-    router.push(`/(tabs)/(shop)/category/${categoryKey}` as any);
+    router.push(`/(tabs)/shop/category/${categoryKey}` as any);
   };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Cart Banner */}
       {cartCount > 0 && (
         <TouchableOpacity 
           style={styles.cartBanner}
@@ -113,7 +108,6 @@ export default function ShopScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Categories Grid */}
       <View style={styles.categoriesSection}>
         <Text style={styles.sectionTitle}>Categories</Text>
         {loading ? (
@@ -150,7 +144,6 @@ export default function ShopScreen() {
         )}
       </View>
 
-      {/* Featured Section */}
       <View style={styles.featuredSection}>
         <Text style={styles.sectionTitle}>Featured</Text>
         
@@ -177,8 +170,6 @@ export default function ShopScreen() {
           </View>
         </TouchableOpacity>
       </View>
-
-
     </ScrollView>
   );
 }
@@ -294,7 +285,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.5,
   },
-
   loadingContainer: {
     alignItems: 'center',
     paddingVertical: 40,

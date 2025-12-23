@@ -34,7 +34,7 @@ interface Product {
 export default function ProductDetailScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const { user } = useAuth();
-  const { addToCart } = useCart();
+  const { addItem } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
@@ -68,7 +68,12 @@ export default function ProductDetailScreen() {
 
     setAddingToCart(true);
     try {
-      await addToCart(productId as string, 1);
+      await addItem({
+        id: productId,
+        name: product.name,
+        price: product.price,
+        media: product.media,
+      });
       Alert.alert('Success', 'Item added to cart');
     } catch (error) {
       console.error('Error adding to cart:', error);

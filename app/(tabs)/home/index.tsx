@@ -67,19 +67,18 @@ export default function HomeScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Hero Section */}
         <Animated.View style={[styles.hero, { opacity: fadeAnim }]}>
           <LinearGradient
             colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.8)"]}
             style={styles.heroGradient}
           />
           <Image
-            source={{ uri: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=1200&h=800&fit=crop" }}
+            source={{ uri: "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/29macqsbskgyov1q3fk5p" }}
             style={styles.heroImage}
           />
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>REYCIN F300</Text>
-            <Text style={styles.heroSubtitle}>Pure Performance Redefined</Text>
+            <Text style={styles.heroSubtitle}>Mechanical Excellence</Text>
             <TouchableOpacity 
               style={styles.heroButton}
               onPress={() => router.push('/f300-explorer')}
@@ -89,7 +88,6 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
-        {/* Announcements */}
         {announcements && announcements.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Latest News</Text>
@@ -116,7 +114,6 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Featured Products */}
         {products && products.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Our Vehicles</Text>
@@ -149,13 +146,12 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Quick Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push('/(tabs)/obd')}
             >
               <Text style={styles.actionIcon}>🔧</Text>
               <Text style={styles.actionTitle}>Diagnostics</Text>
@@ -164,7 +160,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push('/(tabs)/garage')}
             >
               <Text style={styles.actionIcon}>🏁</Text>
               <Text style={styles.actionTitle}>Track Support</Text>
@@ -173,7 +169,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push({ pathname: '/(tabs)/shop/category/[id]', params: { id: 'parts' } })}
             >
               <Text style={styles.actionIcon}>🛒</Text>
               <Text style={styles.actionTitle}>Parts</Text>
@@ -182,7 +178,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => {}}
+              onPress={() => router.push({ pathname: '/(tabs)/shop/category/[id]', params: { id: 'warranty' } })}
             >
               <Text style={styles.actionIcon}>📋</Text>
               <Text style={styles.actionTitle}>Warranty</Text>

@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import { theme } from "@/constants/theme";
 
-export default function OBDLayout() {
+export default function ShopLayout() {
   return (
     <Stack
       screenOptions={{
@@ -21,32 +21,20 @@ export default function OBDLayout() {
       <Stack.Screen 
         name="index" 
         options={{ 
-          title: "OBD Diagnostics",
+          title: "Shop",
           headerTitleAlign: "center",
         }} 
       />
       <Stack.Screen 
-        name="connect" 
+        name="category/[id]" 
         options={{ 
-          title: "Connect Device",
+          title: "Category",
         }} 
       />
       <Stack.Screen 
-        name="dashboard" 
+        name="product/[id]" 
         options={{ 
-          title: "Live Data",
-        }} 
-      />
-      <Stack.Screen 
-        name="dtcs" 
-        options={{ 
-          title: "Fault Codes",
-        }} 
-      />
-      <Stack.Screen 
-        name="actuations" 
-        options={{ 
-          title: "Actuations",
+          title: "Product",
         }} 
       />
     </Stack>

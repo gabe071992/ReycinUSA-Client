@@ -69,35 +69,35 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="(home)"
+        name="home"
         options={{
           title: "F300",
           tabBarIcon: (props) => <TabBarIcon icon={Home} {...props} />,
         }}
       />
       <Tabs.Screen
-        name="(shop)"
+        name="shop"
         options={{
           title: "Shop",
           tabBarIcon: CartTabIcon,
         }}
       />
       <Tabs.Screen
-        name="(obd)"
+        name="obd"
         options={{
           title: "OBD",
           tabBarIcon: (props) => <TabBarIcon icon={Activity} {...props} />,
         }}
       />
       <Tabs.Screen
-        name="(garage)"
+        name="garage"
         options={{
           title: "Garage",
           tabBarIcon: (props) => <TabBarIcon icon={Car} {...props} />,
         }}
       />
       <Tabs.Screen
-        name="(account)"
+        name="account"
         options={{
           title: "Account",
           tabBarIcon: (props) => <TabBarIcon icon={User} {...props} />,

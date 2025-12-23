@@ -12,7 +12,7 @@ import {
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { app } from '@/config/firebase';
-
+import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import { ShoppingCart } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
@@ -34,7 +34,7 @@ interface Product {
 
 export default function ProductDetailScreen() {
   const { id: productId } = useLocalSearchParams<{ id: string }>();
-
+  const { user } = useAuth();
   const { addItem } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +60,11 @@ export default function ProductDetailScreen() {
   }, [productId]);
 
   const handleAddToCart = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to add items to cart');
+      return;
+    }
+
     if (!product) return;
 
     setAddingToCart(true);
@@ -151,39 +156,6 @@ export default function ProductDetailScreen() {
                     {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </Text>
                   <Text style={styles.specValue}>{String(value)}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {product.compat && product.compat.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Compatible With</Text>
-              <View style={styles.compatList}>
-                {product.compat.map((model) => (
-                  <View key={model} style={styles.compatBadge}>
-                    <Text style={styles.compatText}>{model}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {product.options && Object.keys(product.options).length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Available Options</Text>
-              {Object.entries(product.options).map(([optionKey, optionValues]) => (
-                <View key={optionKey} style={styles.optionGroup}>
-                  <Text style={styles.optionLabel}>
-                    {optionKey.replace(/\b\w/g, l => l.toUpperCase())}:
-                  </Text>
-                  <View style={styles.optionValues}>
-                    {optionValues.map((value) => (
-                      <View key={value} style={styles.optionBadge}>
-                        <Text style={styles.optionText}>{value}</Text>
-                      </View>
-                    ))}
-                  </View>
                 </View>
               ))}
             </View>
@@ -315,53 +287,6 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
     flex: 1,
     textAlign: 'right',
-  },
-  compatList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  compatBadge: {
-    backgroundColor: theme.colors.darkGray,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginRight: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGray,
-  },
-  compatText: {
-    color: theme.colors.white,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  optionGroup: {
-    marginBottom: 15,
-  },
-  optionLabel: {
-    fontSize: 14,
-    color: theme.colors.textGray,
-    marginBottom: 8,
-  },
-  optionValues: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  optionBadge: {
-    backgroundColor: theme.colors.darkGray,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginRight: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGray,
-  },
-  optionText: {
-    color: theme.colors.white,
-    fontSize: 12,
   },
   bottomBar: {
     position: 'absolute',

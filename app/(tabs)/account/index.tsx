@@ -10,16 +10,9 @@ import { theme } from "@/constants/theme";
 import { 
   User, 
   Package, 
-  MapPin, 
-  Settings, 
-  Shield, 
-  HelpCircle, 
   LogOut,
   ChevronRight,
-  Mail,
-  Award
 } from "lucide-react-native";
-import { router } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function AccountScreen() {
@@ -32,35 +25,10 @@ export default function AccountScreen() {
       subtitle: "View order history",
       onPress: () => {}
     },
-    { 
-      icon: MapPin, 
-      title: "Addresses", 
-      subtitle: "Manage delivery addresses",
-      onPress: () => {}
-    },
-    { 
-      icon: Shield, 
-      title: "Warranties", 
-      subtitle: "Active warranty plans",
-      onPress: () => {}
-    },
-    { 
-      icon: Settings, 
-      title: "Settings", 
-      subtitle: "App preferences",
-      onPress: () => {}
-    },
-    { 
-      icon: HelpCircle, 
-      title: "Support", 
-      subtitle: "Get help",
-      onPress: () => {}
-    },
   ];
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Profile Header */}
       <View style={styles.profileHeader}>
         <View style={styles.avatar}>
           <User size={40} color={theme.colors.white} strokeWidth={1.5} />
@@ -68,14 +36,9 @@ export default function AccountScreen() {
         <View style={styles.profileInfo}>
           <Text style={styles.profileName}>{profile?.displayName || "Driver"}</Text>
           <Text style={styles.profileEmail}>{profile?.email}</Text>
-          <View style={styles.roleBadge}>
-            <Award size={12} color={theme.colors.black} />
-            <Text style={styles.roleText}>{profile?.role?.toUpperCase() || "USER"}</Text>
-          </View>
         </View>
       </View>
 
-      {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.stat}>
           <Text style={styles.statValue}>
@@ -88,14 +51,8 @@ export default function AccountScreen() {
           <Text style={styles.statValue}>0</Text>
           <Text style={styles.statLabel}>Orders</Text>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>0</Text>
-          <Text style={styles.statLabel}>Sessions</Text>
-        </View>
       </View>
 
-      {/* Menu Items */}
       <View style={styles.menuSection}>
         {menuItems.map((item, index) => {
           const Icon = item.icon;
@@ -120,16 +77,14 @@ export default function AccountScreen() {
         })}
       </View>
 
-      {/* Sign Out */}
       <TouchableOpacity 
         style={styles.signOutButton}
         onPress={signOut}
       >
-        <LogOut size={20} color={theme.colors.error} />
+        <LogOut size={20} color="#EF4444" />
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
 
-      {/* Version */}
       <Text style={styles.version}>Reycin USA v1.0.0</Text>
     </ScrollView>
   );
@@ -169,23 +124,6 @@ const styles = StyleSheet.create({
   profileEmail: {
     fontSize: 14,
     color: theme.colors.textGray,
-    marginBottom: 8,
-  },
-  roleBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: theme.colors.white,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: theme.borderRadius.sm,
-    alignSelf: "flex-start",
-    gap: 4,
-  },
-  roleText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: theme.colors.black,
-    letterSpacing: 0.5,
   },
   statsContainer: {
     flexDirection: "row",
@@ -262,11 +200,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.darkGray,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.error,
+    borderColor: "#EF4444",
     gap: 8,
   },
   signOutText: {
-    color: theme.colors.error,
+    color: "#EF4444",
     fontSize: 16,
     fontWeight: "600",
   },

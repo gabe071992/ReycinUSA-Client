@@ -1,14 +1,14 @@
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 import { useEffect } from "react";
-import { router } from "expo-router";
 
 export default function AuthLayout() {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/home");
     }
   }, [isAuthenticated]);
 
