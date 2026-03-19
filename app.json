@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Reycin USA Client",
-    "slug": "reycin-usa-ultra-sleek-mobile-app",
+    "name": "Reycin USA ",
+    "slug": "reycin-usa",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.rork.reycin-usa-ultra-sleek-mobile-app"
+      "bundleIdentifier": "app.reycin-usa"
     },
     "android": {
       "adaptiveIcon": {
