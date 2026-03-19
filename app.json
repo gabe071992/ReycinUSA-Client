@@ -22,7 +22,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.reycin-usa-ultra-sleek-mobile-app"
+      "package": "app.reycin-usa"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
