@@ -1,4 +1,4 @@
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import React from "react";
 import { View, Text } from "react-native";
 import { Home, ShoppingBag, Activity, Car, User } from "lucide-react-native";
@@ -80,6 +80,12 @@ export default function TabLayout() {
         options={{
           title: "Shop",
           tabBarIcon: CartTabIcon,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.replace("/shop");
+          },
         }}
       />
       <Tabs.Screen
