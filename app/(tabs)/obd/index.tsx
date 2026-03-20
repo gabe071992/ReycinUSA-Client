@@ -97,7 +97,7 @@ export default function OBDScreen() {
           <Wifi size={20} color={theme.colors.textGray} />
           <View style={styles.infoContent}>
             <Text style={styles.infoName}>Reycin Link Wi-Fi</Text>
-            <Text style={styles.infoDescription}>ESP32-based OBD adapter</Text>
+        
           </View>
         </View>
         
