@@ -96,7 +96,7 @@ export default function OBDScreen() {
         <View style={styles.infoCard}>
           <Wifi size={20} color={theme.colors.textGray} />
           <View style={styles.infoContent}>
-            <Text style={styles.infoName}>Reycin Link Wi-Fi</Text>
+            <Text style={styles.infoName}>Reycin Link</Text>
         
           </View>
         </View>
