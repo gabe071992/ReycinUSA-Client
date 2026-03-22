@@ -83,13 +83,13 @@ const F300Explorer = () => {
         <View style={styles.sectionContent}>
           <Text style={styles.tagline}>"Four cylinders never sounded this good"</Text>
           <Text style={styles.description}>
-            The F300 is engineered as a high-performance track kart that bridges the gap between pure racing performance and street-legal capability. With its dual-purpose design, advanced telemetry, and cutting-edge aerodynamics, the F300 represents the pinnacle of lightweight performance engineering.
+            The F300 is engineered as a high-performance track car that bridges the gap between pure racing performance and street-legal capability. With its dual-purpose design, advanced telemetry, and cutting-edge aerodynamics, the F300 represents the pinnacle of lightweight performance engineering.
           </Text>
           <View style={styles.releaseCard}>
             <Calendar size={24} color={COLORS.primary} />
             <View style={styles.releaseInfo}>
               <Text style={styles.releaseLabel}>Official Release</Text>
-              <Text style={styles.releaseDate}>December 10, 2025</Text>
+              <Text style={styles.releaseDate}>December 5, 2026</Text>
             </View>
           </View>
           <View style={styles.featureGrid}>
