@@ -10,7 +10,7 @@ import {
   PanResponder,
   FlatList,
 } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import LeafletMapView, { LeafletMapHandle } from "@/components/LeafletMapView";
 import * as Location from "expo-location";
 import {
   Flag,
@@ -51,12 +51,7 @@ interface Track {
   recordedAt?: string;
 }
 
-type MapRegion = {
-  latitude: number;
-  longitude: number;
-  latitudeDelta: number;
-  longitudeDelta: number;
-};
+
 
 type FloatData = {
   visible: boolean;
@@ -107,21 +102,7 @@ function estimateLength(coords: TrackCoordinate[]): number {
   return Math.round(total * 100) / 100;
 }
 
-function getRegionForCoords(coords: TrackCoordinate[]): MapRegion {
-  const lats = coords.map((c) => c.latitude);
-  const lngs = coords.map((c) => c.longitude);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const pad = 0.003;
-  return {
-    latitude: (minLat + maxLat) / 2,
-    longitude: (minLng + maxLng) / 2,
-    latitudeDelta: maxLat - minLat + pad,
-    longitudeDelta: maxLng - minLng + pad,
-  };
-}
+
 
 function formatElapsed(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -160,16 +141,6 @@ function FloatingMapOverlay({
     })
   ).current;
 
-  const region: MapRegion =
-    coords.length > 1
-      ? getRegionForCoords(coords)
-      : {
-          latitude: track.center.latitude,
-          longitude: track.center.longitude,
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012,
-        };
-
   return (
     <Animated.View
       style={[
@@ -189,30 +160,14 @@ function FloatingMapOverlay({
           <X size={13} color="#555" strokeWidth={2} />
         </TouchableOpacity>
       </View>
-      <MapView
+      <LeafletMapView
+        center={track.center}
+        zoom={14}
+        coordinates={coords}
+        markerCoordinate={coords.length === 0 ? track.center : undefined}
+        interactive={false}
         style={floatStyles.map}
-        provider={PROVIDER_DEFAULT}
-        region={region}
-        scrollEnabled={false}
-        zoomEnabled={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
-        mapType="satellite"
-        pointerEvents="none"
-      >
-        {coords.length > 1 && (
-          <Polyline
-            coordinates={coords}
-            strokeColor="#FF1801"
-            strokeWidth={2}
-          />
-        )}
-        {coords.length === 0 && (
-          <Marker coordinate={track.center}>
-            <View style={floatStyles.markerDot} />
-          </Marker>
-        )}
-      </MapView>
+      />
     </Animated.View>
   );
 }
@@ -364,7 +319,7 @@ function TracksScreen({
   const watcherRef = useRef<Location.LocationSubscription | null>(null);
   const recordStartRef = useRef(0);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<LeafletMapHandle>(null);
 
   useEffect(() => {
     return () => {
@@ -407,8 +362,7 @@ function TracksScreen({
         setRecordedCoords((prev) => {
           const next = [...prev, coord];
           if (next.length > 1 && mapRef.current) {
-            const region = getRegionForCoords(next);
-            mapRef.current.animateToRegion(region, 300);
+            mapRef.current.update(next, next[next.length - 1]);
           }
           return next;
         });
@@ -469,22 +423,10 @@ function TracksScreen({
   }, []);
 
   if (isRecording) {
-    const liveRegion =
-      recordedCoords.length > 1
-        ? getRegionForCoords(recordedCoords)
-        : recordedCoords.length === 1
-        ? {
-            latitude: recordedCoords[0].latitude,
-            longitude: recordedCoords[0].longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          }
-        : {
-            latitude: 36.5844,
-            longitude: -121.7547,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          };
+    const liveCenter =
+      recordedCoords.length > 0
+        ? recordedCoords[recordedCoords.length - 1]
+        : { latitude: 36.5844, longitude: -121.7547 };
 
     return (
       <View style={recStyles.root}>
@@ -496,28 +438,14 @@ function TracksScreen({
           <Text style={recStyles.recTime}>{formatElapsed(recordElapsed)}</Text>
           <Text style={recStyles.recPts}>{recordedCoords.length} pts</Text>
         </View>
-        <MapView
+        <LeafletMapView
           ref={mapRef}
+          center={liveCenter}
+          zoom={16}
+          coordinates={[]}
+          interactive={false}
           style={recStyles.map}
-          provider={PROVIDER_DEFAULT}
-          region={liveRegion}
-          mapType="satellite"
-        >
-          {recordedCoords.length > 1 && (
-            <Polyline
-              coordinates={recordedCoords}
-              strokeColor="#FF1801"
-              strokeWidth={3}
-            />
-          )}
-          {recordedCoords.length > 0 && (
-            <Marker coordinate={recordedCoords[recordedCoords.length - 1]}>
-              <View style={recStyles.liveMarker}>
-                <View style={recStyles.liveMarkerInner} />
-              </View>
-            </Marker>
-          )}
-        </MapView>
+        />
         <View style={recStyles.bottomBar}>
           <View style={recStyles.statsRow}>
             <View style={recStyles.statCell}>
@@ -554,15 +482,7 @@ function TracksScreen({
   }
 
   if (showMap && selectedTrack) {
-    const mapRegion =
-      selectedTrack.coordinates.length > 1
-        ? getRegionForCoords(selectedTrack.coordinates)
-        : {
-            latitude: selectedTrack.center.latitude,
-            longitude: selectedTrack.center.longitude,
-            latitudeDelta: 0.015,
-            longitudeDelta: 0.015,
-          };
+
 
     return (
       <View style={mapViewStyles.root}>
@@ -584,26 +504,14 @@ function TracksScreen({
             <Text style={mapViewStyles.floatBtnText}>FLOAT</Text>
           </TouchableOpacity>
         </View>
-        <MapView
+        <LeafletMapView
+          center={selectedTrack.center}
+          zoom={14}
+          coordinates={selectedTrack.coordinates}
+          markerCoordinate={selectedTrack.coordinates.length === 0 ? selectedTrack.center : undefined}
+          interactive={true}
           style={mapViewStyles.map}
-          provider={PROVIDER_DEFAULT}
-          region={mapRegion}
-          mapType="satellite"
-        >
-          {selectedTrack.coordinates.length > 1 ? (
-            <Polyline
-              coordinates={selectedTrack.coordinates}
-              strokeColor="#FF1801"
-              strokeWidth={3}
-            />
-          ) : (
-            <Marker coordinate={selectedTrack.center}>
-              <View style={mapViewStyles.centerMarker}>
-                <View style={mapViewStyles.centerMarkerInner} />
-              </View>
-            </Marker>
-          )}
-        </MapView>
+        />
         <View style={mapViewStyles.infoCard}>
           <View style={mapViewStyles.infoRow}>
             <View style={mapViewStyles.infoMain}>
