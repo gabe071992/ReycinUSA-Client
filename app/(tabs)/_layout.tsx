@@ -1,7 +1,7 @@
 import { Tabs, router } from "expo-router";
 import React from "react";
 import { View, Text } from "react-native";
-import { Home, ShoppingBag, Activity, Car, User } from "lucide-react-native";
+import { Home, ShoppingBag, Flag, Car, User } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { useCart } from "@/providers/CartProvider";
 
@@ -16,7 +16,7 @@ function TabBarIcon({ icon: Icon, color, focused }: any) {
 function CartTabIcon({ color, focused }: any) {
   const { getItemCount } = useCart();
   const count = getItemCount();
-  
+
   return (
     <View style={{ alignItems: "center" }}>
       <ShoppingBag color={color} size={24} strokeWidth={focused ? 2 : 1.5} />
@@ -33,10 +33,10 @@ function CartTabIcon({ color, focused }: any) {
           alignItems: "center",
           paddingHorizontal: 4,
         }}>
-          <Text style={{ 
-            color: theme.colors.black, 
-            fontSize: 11, 
-            fontWeight: "600" 
+          <Text style={{
+            color: theme.colors.black,
+            fontSize: 11,
+            fontWeight: "600",
           }}>
             {count}
           </Text>
@@ -89,10 +89,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="obd"
+        name="race"
         options={{
-          title: "OBD",
-          tabBarIcon: (props) => <TabBarIcon icon={Activity} {...props} />,
+          title: "Race",
+          tabBarIcon: (props) => <TabBarIcon icon={Flag} {...props} />,
         }}
       />
       <Tabs.Screen
@@ -107,6 +107,12 @@ export default function TabLayout() {
         options={{
           title: "Account",
           tabBarIcon: (props) => <TabBarIcon icon={User} {...props} />,
+        }}
+      />
+      <Tabs.Screen
+        name="obd"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

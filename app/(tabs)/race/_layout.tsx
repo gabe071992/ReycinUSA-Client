@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import { theme } from "@/constants/theme";
 
-export default function GarageLayout() {
+export default function RaceLayout() {
   return (
     <Stack
       screenOptions={{
@@ -21,24 +21,8 @@ export default function GarageLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "My Garage",
+          title: "Race",
           headerTitleAlign: "center",
-        }}
-      />
-      <Stack.Screen
-        name="[id]"
-        options={{
-          title: "Vehicle",
-          headerTitleAlign: "center",
-          headerBackTitle: "Garage",
-        }}
-      />
-      <Stack.Screen
-        name="obd"
-        options={{
-          title: "OBD Diagnostics",
-          headerTitleAlign: "center",
-          headerBackTitle: "Vehicle",
         }}
       />
     </Stack>

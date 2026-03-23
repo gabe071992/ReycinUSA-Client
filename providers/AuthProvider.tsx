@@ -14,6 +14,63 @@ import { auth, database } from "@/config/firebase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
+export interface EngineConfig {
+  type: string;
+  displacement?: string;
+  hp?: number;
+  torque?: number;
+  tuner?: string;
+  fuelType?: string;
+  notes?: string;
+}
+
+export interface RepairEntry {
+  date: number;
+  type: "repair" | "upgrade" | "maintenance";
+  title: string;
+  description?: string;
+  mileage?: number;
+  cost?: number;
+  shop?: string;
+}
+
+export interface DamageReport {
+  date: number;
+  title: string;
+  description?: string;
+  severity: "minor" | "moderate" | "severe";
+  repaired: boolean;
+}
+
+export interface Booking {
+  date: number;
+  type: "service" | "track";
+  title: string;
+  location?: string;
+  notes?: string;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+}
+
+export interface Vehicle {
+  productId: string;
+  model: string;
+  color?: string;
+  package?: string;
+  year?: number;
+  vin?: string;
+  image?: string;
+  specs?: Record<string, any>;
+  addedAt: number;
+  nickname?: string;
+  mileage?: number;
+  notes?: string;
+  manualUrl?: string;
+  engineConfig?: EngineConfig;
+  repairs?: Record<string, RepairEntry>;
+  damages?: Record<string, DamageReport>;
+  bookings?: Record<string, Booking>;
+}
+
 interface UserProfile {
   uid: string;
   email: string;
@@ -24,18 +81,6 @@ interface UserProfile {
   createdAt: number;
   vehicles?: Record<string, Vehicle>;
   addresses?: Record<string, Address>;
-}
-
-interface Vehicle {
-  productId: string;
-  model: string;
-  color?: string;
-  package?: string;
-  year?: number;
-  vin?: string;
-  image?: string;
-  specs?: Record<string, any>;
-  addedAt: number;
 }
 
 interface Address {
@@ -187,6 +232,43 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   }, [user, profile]);
 
+  const updateVehicle = useCallback(async (vehicleId: string, updates: Partial<Vehicle>) => {
+    if (!user || !profile) return;
+    try {
+      const existing = profile.vehicles || {};
+      const currentVehicle = existing[vehicleId];
+      if (!currentVehicle) return;
+      const updatedVehicle: Vehicle = { ...currentVehicle, ...updates };
+      const updated: UserProfile = {
+        ...profile,
+        vehicles: { ...existing, [vehicleId]: updatedVehicle },
+      };
+      const profileRef = ref(database, `reycinUSA/users/${user.uid}`);
+      await set(profileRef, updated);
+      setProfile(updated);
+      console.log("Vehicle updated:", vehicleId);
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  }, [user, profile]);
+
+  const removeVehicle = useCallback(async (vehicleId: string) => {
+    if (!user || !profile) return;
+    try {
+      const existing = { ...(profile.vehicles || {}) };
+      delete existing[vehicleId];
+      const updated: UserProfile = { ...profile, vehicles: existing };
+      const profileRef = ref(database, `reycinUSA/users/${user.uid}`);
+      await set(profileRef, updated);
+      setProfile(updated);
+      console.log("Vehicle removed:", vehicleId);
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  }, [user, profile]);
+
   const changePassword = useCallback(async (newPassword: string) => {
     if (!user) return;
     try {
@@ -210,9 +292,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signOut,
     updateProfile,
     addVehicle,
+    updateVehicle,
+    removeVehicle,
     changePassword,
     isAuthenticated: !!user,
     isEmailVerified: user?.emailVerified || false,
     hasRole,
-  }), [user, profile, loading, error, rememberMe, signIn, signUp, signOut, updateProfile, addVehicle, changePassword, hasRole]);
+  }), [user, profile, loading, error, rememberMe, signIn, signUp, signOut, updateProfile, addVehicle, updateVehicle, removeVehicle, changePassword, hasRole]);
 });

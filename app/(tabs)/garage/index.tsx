@@ -8,8 +8,9 @@ import {
   Image,
 } from "react-native";
 import { theme } from "@/constants/theme";
-import { Car, Tag, Package } from "lucide-react-native";
+import { Car, Tag, Package, ChevronRight } from "lucide-react-native";
 import { useAuth } from "@/providers/AuthProvider";
+import { router } from "expo-router";
 
 export default function GarageScreen() {
   const { profile } = useAuth();
@@ -33,7 +34,8 @@ export default function GarageScreen() {
               key={id}
               style={styles.vehicleCard}
               activeOpacity={0.85}
-              onPress={() => {}}
+              onPress={() => router.push(`/garage/${id}` as any)}
+              testID={`vehicle-card-${id}`}
             >
               {vehicle.image ? (
                 <Image
@@ -48,7 +50,19 @@ export default function GarageScreen() {
               )}
 
               <View style={styles.vehicleInfo}>
-                <Text style={styles.vehicleModel}>{vehicle.model}</Text>
+                <View style={styles.vehicleNameRow}>
+                  <View style={styles.vehicleNameBlock}>
+                    {vehicle.nickname ? (
+                      <>
+                        <Text style={styles.vehicleNickname}>{vehicle.nickname}</Text>
+                        <Text style={styles.vehicleModel}>{vehicle.model}</Text>
+                      </>
+                    ) : (
+                      <Text style={styles.vehicleModel}>{vehicle.model}</Text>
+                    )}
+                  </View>
+                  <ChevronRight size={20} color={theme.colors.textGray} strokeWidth={1.5} />
+                </View>
 
                 <View style={styles.badgeRow}>
                   {vehicle.color && (
@@ -63,13 +77,18 @@ export default function GarageScreen() {
                       <Text style={styles.badgeText}>{vehicle.package}</Text>
                     </View>
                   )}
+                  {vehicle.engineConfig?.type && (
+                    <View style={[styles.badge, styles.badgeAccent]}>
+                      <Text style={styles.badgeAccentText}>{vehicle.engineConfig.type}</Text>
+                    </View>
+                  )}
                 </View>
 
                 {vehicle.specs && Object.keys(vehicle.specs).length > 0 && (
                   <View style={styles.specsRow}>
                     {vehicle.specs.hp !== undefined && (
                       <View style={styles.specItem}>
-                        <Text style={styles.specValue}>{vehicle.specs.hp}</Text>
+                        <Text style={styles.specValue}>{vehicle.engineConfig?.hp ?? vehicle.specs.hp}</Text>
                         <Text style={styles.specLabel}>hp</Text>
                       </View>
                     )}
@@ -150,11 +169,25 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
   },
-  vehicleModel: {
-    fontSize: 20,
+  vehicleNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  vehicleNameBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  vehicleNickname: {
+    fontSize: 22,
     fontWeight: "700",
     color: theme.colors.white,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
+  },
+  vehicleModel: {
+    fontSize: 14,
+    fontWeight: "400",
+    color: theme.colors.textGray,
   },
   badgeRow: {
     flexDirection: "row",
@@ -172,9 +205,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderGray,
   },
+  badgeAccent: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.15)",
+  },
   badgeText: {
     fontSize: 12,
     color: theme.colors.textGray,
+    fontWeight: "500",
+  },
+  badgeAccentText: {
+    fontSize: 12,
+    color: theme.colors.white,
     fontWeight: "500",
   },
   specsRow: {
