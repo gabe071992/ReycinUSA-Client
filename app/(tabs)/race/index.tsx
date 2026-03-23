@@ -14,7 +14,6 @@ import LeafletMapView, { LeafletMapHandle } from "@/components/LeafletMapView";
 import * as Location from "expo-location";
 import {
   Flag,
-  Wrench,
   Radio,
   MapPin,
   Play,
@@ -32,6 +31,7 @@ import {
   Send,
   BookmarkPlus,
 } from "lucide-react-native";
+import TuningConsole from "@/app/(tabs)/race/tuning";
 
 type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit";
 
@@ -2031,14 +2031,7 @@ export default function RaceScreen() {
       case "tracks":
         return <TracksScreen onFloat={handleFloat} />;
       case "tuning":
-        return (
-          <PlaceholderScreen
-            icon={<Wrench size={32} color="#333" strokeWidth={1.5} />}
-            title="Tuning Console"
-            subtitle="Exhaustive granular engine and chassis tuning parameters. Live ECU write-back and logging in development."
-            tag="COMING SOON"
-          />
-        );
+        return <TuningConsole />;
       case "pit":
         return (
           <PlaceholderScreen

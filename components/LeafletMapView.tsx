@@ -1,6 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useRef } from "react";
-import { View, StyleProp, ViewStyle } from "react-native";
-import WebView from "react-native-webview";
+import { View, Text, StyleProp, ViewStyle, Platform } from "react-native";
+import { MapPin } from "lucide-react-native";
 
 interface Coord {
   latitude: number;
@@ -112,6 +112,11 @@ if (window.ReactNativeWebView) {
 </html>`;
 }
 
+let WebViewComponent: any = null;
+if (Platform.OS !== "web") {
+  WebViewComponent = require("react-native-webview").default;
+}
+
 const LeafletMapView = forwardRef<LeafletMapHandle, LeafletMapViewProps>(
   (
     {
@@ -124,21 +129,61 @@ const LeafletMapView = forwardRef<LeafletMapHandle, LeafletMapViewProps>(
     },
     ref
   ) => {
-    const webViewRef = useRef<WebView>(null);
+    const webViewRef = useRef<any>(null);
 
     useImperativeHandle(ref, () => ({
       update: (coords: Coord[], marker?: Coord) => {
+        if (Platform.OS === "web") return;
         const payload = JSON.stringify({ type: "update", coords, marker: marker ?? null });
         const js = `handleMessage(${JSON.stringify(payload)}); true;`;
         webViewRef.current?.injectJavaScript(js);
       },
     }));
 
+    if (Platform.OS === "web") {
+      return (
+        <View
+          style={[
+            {
+              overflow: "hidden",
+              backgroundColor: "#050505",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+            },
+            style,
+          ]}
+        >
+          <MapPin size={22} color="#2a2a2a" strokeWidth={1.5} />
+          <Text
+            style={{
+              color: "#2a2a2a",
+              fontSize: 9,
+              letterSpacing: 2,
+              fontWeight: "700",
+            }}
+          >
+            MAP VIEW
+          </Text>
+          <Text
+            style={{
+              color: "#1a1a1a",
+              fontSize: 9,
+              textAlign: "center",
+              letterSpacing: 0.5,
+            }}
+          >
+            Open on mobile device
+          </Text>
+        </View>
+      );
+    }
+
     const html = buildHTML(center, zoom, coordinates, markerCoordinate, interactive);
 
     return (
       <View style={[{ overflow: "hidden" }, style]}>
-        <WebView
+        <WebViewComponent
           ref={webViewRef}
           source={{ html }}
           style={{ flex: 1, backgroundColor: "#000" }}

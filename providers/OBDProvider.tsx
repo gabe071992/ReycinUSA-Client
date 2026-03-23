@@ -1,14 +1,14 @@
 import createContextHook from "@nkzw/create-context-hook";
-import { useState, useEffect, useRef } from "react";
-import { Platform } from "react-native";
-import { ref, set, push, serverTimestamp } from "firebase/database";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+
+import { ref, set, push } from "firebase/database";
 import { database } from "@/config/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 
 type ConnectionType = "ble" | "wifi" | "usb" | null;
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
-interface TelemetryData {
+export interface TelemetryData {
   t: number;
   rpm?: number;
   ect_c?: number;
@@ -17,11 +17,22 @@ interface TelemetryData {
   vbat?: number;
   speed_kmh?: number;
   throttle_pct?: number;
+  engine_load?: number;
+  stft?: number;
+  ltft?: number;
+  o2_voltage?: number;
+  fuel_status?: string;
 }
 
-interface DTC {
+export interface DTC {
   code: string;
   description?: string;
+}
+
+export interface RawEntry {
+  cmd: string;
+  response: string;
+  ts: number;
 }
 
 interface OBDSession {
@@ -47,124 +58,54 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
   const [currentSession, setCurrentSession] = useState<OBDSession | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState<string | null>(null);
-  
+  const [pollRate, setPollRateState] = useState(10);
+  const [rawHistory, setRawHistory] = useState<RawEntry[]>([]);
+
   const wsRef = useRef<WebSocket | null>(null);
   const telemetryBuffer = useRef<TelemetryData[]>([]);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
+  const connectionTypeRef = useRef<ConnectionType>(null);
+  const connectionStatusRef = useRef<ConnectionStatus>("disconnected");
+  const pollRateRef = useRef(10);
+  const isRecordingRef = useRef(false);
+  const currentSessionRef = useRef<OBDSession | null>(null);
+
+  const openWSRef = useRef<((type: ConnectionType) => void) | null>(null);
+
+  useEffect(() => { connectionTypeRef.current = connectionType; }, [connectionType]);
+  useEffect(() => { connectionStatusRef.current = connectionStatus; }, [connectionStatus]);
+  useEffect(() => { pollRateRef.current = pollRate; }, [pollRate]);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => { currentSessionRef.current = currentSession; }, [currentSession]);
+
+  const uploadTelemetryBatch = useCallback(async () => {
+    const session = currentSessionRef.current;
+    if (!session?.id || telemetryBuffer.current.length === 0) return;
+    const batch = telemetryBuffer.current.splice(0, 10);
+    const logRef = ref(database, `reycinUSA/obd/sessionLogs/${session.id}`);
+    const updates: Record<string, TelemetryData> = {};
+    batch.forEach((data) => { updates[`t_${data.t}`] = data; });
+    await set(logRef, updates);
   }, []);
 
-  const connect = async (type: ConnectionType) => {
-    if (!type) return;
-    
-    setConnectionType(type);
-    setConnectionStatus("connecting");
-    
-    try {
-      if (type === "wifi") {
-        await connectWebSocket();
-      } else if (type === "ble") {
-        await connectBLE();
-      } else if (type === "usb" && Platform.OS === "android") {
-        await connectUSB();
-      }
-    } catch (error) {
-      console.error("Connection failed:", error);
-      setConnectionStatus("error");
-      scheduleReconnect();
+  const sendCommand = useCallback((payload: object): boolean => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn("[OBD] Cannot send — not connected");
+      return false;
     }
-  };
+    wsRef.current.send(JSON.stringify(payload));
+    return true;
+  }, []);
 
-  const connectWebSocket = async () => {
-    const ws = new WebSocket("ws://192.168.4.1:81"); // ESP32 WebSocket server on port 81
-    
-    ws.onopen = () => {
-      console.log("WebSocket connected");
-      setConnectionStatus("connected");
-      wsRef.current = ws;
-      
-      // Send initial handshake - ESP32 firmware expects 'command' field
-      ws.send(JSON.stringify({ command: "get_telemetry" }));
-    };
-    
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        handleMessage(msg);
-      } catch (error) {
-        console.error("Failed to parse message:", error);
-      }
-    };
-    
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      setConnectionStatus("error");
-    };
-    
-    ws.onclose = () => {
-      console.log("WebSocket closed");
-      setConnectionStatus("disconnected");
-      wsRef.current = null;
-      scheduleReconnect();
-    };
-  };
-
-  const connectBLE = async () => {
-    // BLE implementation stub
-    console.log("BLE connection not yet implemented");
-    setConnectionStatus("error");
-  };
-
-  const connectUSB = async () => {
-    // USB Serial implementation stub
-    console.log("USB Serial connection not yet implemented");
-    setConnectionStatus("error");
-  };
-
-  const disconnect = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
-    
-    setConnectionStatus("disconnected");
-    setConnectionType(null);
-  };
-
-  const scheduleReconnect = () => {
-    if (reconnectTimer.current) return;
-    
-    reconnectTimer.current = setTimeout(() => {
-      reconnectTimer.current = null;
-      if (connectionType && connectionStatus !== "connected") {
-        connect(connectionType);
-      }
-    }, 3000);
-  };
-
-  const handleMessage = (msg: any) => {
-    console.log("Received OBD message:", msg);
-    
+  const handleMessage = useCallback((msg: Record<string, any>) => {
+    console.log("[OBD] Message:", msg.type);
     switch (msg.type) {
       case "connected":
-        console.log("ESP32 connected, version:", msg.version);
-        setFirmwareVersion(msg.version);
-        // Start requesting telemetry data
-        if (wsRef.current) {
-          wsRef.current.send(JSON.stringify({ command: "set_poll_rate", rate: 10 }));
-        }
+        setFirmwareVersion(msg.version ?? null);
+        sendCommand({ command: "set_poll_rate", rate: pollRateRef.current });
         break;
-        
-      case "telemetry":
+      case "telemetry": {
         const data: TelemetryData = {
           t: msg.timestamp || Date.now(),
           rpm: msg.rpm,
@@ -174,150 +115,180 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
           vbat: msg.vbat,
           speed_kmh: msg.speed_kmh,
           throttle_pct: msg.throttle_pct,
+          engine_load: msg.engine_load,
+          stft: msg.stft,
+          ltft: msg.ltft,
+          o2_voltage: msg.o2_voltage,
+          fuel_status: msg.fuel_status,
         };
         setTelemetry(data);
-        
-        if (isRecording && currentSession) {
+        if (isRecordingRef.current && currentSessionRef.current) {
           telemetryBuffer.current.push(data);
-          
-          // Batch upload every 10 samples
           if (telemetryBuffer.current.length >= 10) {
-            uploadTelemetryBatch();
+            void uploadTelemetryBatch();
           }
         }
         break;
-        
-      case "dtc_codes":
-        const dtcs = msg.codes?.map((code: string) => ({ code, description: undefined })) || [];
+      }
+      case "dtc_codes": {
+        const dtcs: DTC[] = (msg.codes ?? []).map((code: string) => ({ code }));
         setActiveDTCs(dtcs);
         break;
-        
-      case "raw_response":
-        console.log("Raw OBD response:", msg.command, msg.response);
-        break;
-        
+      }
       case "dtc_cleared":
-        console.log("DTCs cleared successfully");
         setActiveDTCs([]);
         setPendingDTCs([]);
         break;
-        
-      default:
-        console.log("Unknown message type:", msg.type, msg);
+      case "raw_response":
+        console.log("[OBD] Raw:", msg.command, "→", msg.response);
+        setRawHistory((prev) => [
+          { cmd: msg.command ?? "", response: msg.response ?? "", ts: Date.now() },
+          ...prev.slice(0, 49),
+        ]);
         break;
+      default:
+        console.log("[OBD] Unknown message type:", msg.type);
     }
-  };
+  }, [sendCommand, uploadTelemetryBatch]);
 
-  const startPolling = () => {
-    if (!wsRef.current) return;
-    
-    wsRef.current.send(JSON.stringify({
-      type: "poll.start",
-      rateHz: 10,
-      pids: ["0C", "05", "0F", "2F", "10", "42"],
-    }));
-  };
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimer.current) return;
+    reconnectTimer.current = setTimeout(() => {
+      reconnectTimer.current = null;
+      const ct = connectionTypeRef.current;
+      const cs = connectionStatusRef.current;
+      if (ct && cs !== "connected" && openWSRef.current) {
+        openWSRef.current(ct);
+      }
+    }, 3000);
+  }, []);
 
-  const stopPolling = () => {
-    if (!wsRef.current) return;
-    
-    wsRef.current.send(JSON.stringify({ type: "poll.stop" }));
-  };
-
-  const readDTCs = () => {
-    if (!wsRef.current) return;
-    
-    wsRef.current.send(JSON.stringify({ type: "dtc.read" }));
-  };
-
-  const clearDTCs = () => {
-    if (!wsRef.current) return;
-    if (!profile || !["tech", "engineer"].includes(profile.role)) {
-      console.error("Insufficient permissions to clear DTCs");
-      return;
+  const disconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
     }
-    
-    wsRef.current.send(JSON.stringify({ type: "dtc.clear" }));
-  };
-
-  const sendActuation = (command: string, value: number) => {
-    if (!wsRef.current) return;
-    if (!profile || !["tech", "engineer"].includes(profile.role)) {
-      console.error("Insufficient permissions for actuations");
-      return;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
     }
-    
-    wsRef.current.send(JSON.stringify({
-      type: "mode08",
-      command,
-      value,
-    }));
-  };
+    setConnectionStatus("disconnected");
+    setConnectionType(null);
+  }, []);
 
-  const startSession = async (vehicleId: string, notes?: string) => {
-    if (!user) return;
-    
-    const session: OBDSession = {
-      vehicleId,
-      startedAt: Date.now(),
-      profile: "default",
-      notes,
+  useEffect(() => {
+    const openWS = (type: ConnectionType) => {
+      if (!type) return;
+      if (type === "wifi") {
+        const ws = new WebSocket("ws://192.168.4.1:81");
+        ws.onopen = () => {
+          console.log("[OBD] WebSocket connected");
+          setConnectionStatus("connected");
+          wsRef.current = ws;
+        };
+        ws.onmessage = (event) => {
+          try {
+            handleMessage(JSON.parse(event.data));
+          } catch (e) {
+            console.error("[OBD] Parse error:", e);
+          }
+        };
+        ws.onerror = () => {
+          setConnectionStatus("error");
+        };
+        ws.onclose = () => {
+          console.log("[OBD] WebSocket closed");
+          setConnectionStatus("disconnected");
+          wsRef.current = null;
+          scheduleReconnect();
+        };
+      } else if (type === "ble" || type === "usb") {
+        console.log(`[OBD] ${type} not yet implemented`);
+        setConnectionStatus("error");
+      }
     };
-    
-    // Create session in Firebase
+    openWSRef.current = openWS;
+  }, [handleMessage, scheduleReconnect]);
+
+  const connect = useCallback(async (type: ConnectionType) => {
+    if (!type) return;
+    setConnectionType(type);
+    setConnectionStatus("connecting");
+    try {
+      if (openWSRef.current) openWSRef.current(type);
+    } catch (error) {
+      console.error("[OBD] Connection failed:", error);
+      setConnectionStatus("error");
+      scheduleReconnect();
+    }
+  }, [scheduleReconnect]);
+
+  useEffect(() => {
+    return () => { disconnect(); };
+  }, [disconnect]);
+
+  const readDTCs = useCallback(() => {
+    sendCommand({ command: "get_dtc" });
+  }, [sendCommand]);
+
+  const clearDTCs = useCallback(() => {
+    if (!profile || !["tech", "engineer"].includes((profile as any).role ?? "")) {
+      console.warn("[OBD] Clearing DTCs — elevated role not confirmed");
+    }
+    sendCommand({ command: "clear_dtc" });
+  }, [sendCommand, profile]);
+
+  const sendActuation = useCallback((control: string, state: boolean) => {
+    sendCommand({ command: "actuate", control, state });
+  }, [sendCommand]);
+
+  const sendRaw = useCallback((cmd: string) => {
+    if (!cmd.trim()) return;
+    const trimmed = cmd.trim().toUpperCase();
+    console.log("[OBD] Raw command:", trimmed);
+    setRawHistory((prev) => [
+      { cmd: trimmed, response: "...", ts: Date.now() },
+      ...prev.slice(0, 49),
+    ]);
+    sendCommand({ command: "raw_obd", cmd: trimmed });
+  }, [sendCommand]);
+
+  const setPollRate = useCallback((rate: number) => {
+    const clamped = Math.min(20, Math.max(1, rate));
+    setPollRateState(clamped);
+    sendCommand({ command: "set_poll_rate", rate: clamped });
+  }, [sendCommand]);
+
+  const startSession = useCallback(async (vehicleId: string, notes?: string) => {
+    if (!user) return;
+    const session: OBDSession = { vehicleId, startedAt: Date.now(), profile: "default", notes };
     const sessionRef = push(ref(database, "reycinUSA/obd/sessions"));
     session.id = sessionRef.key || undefined;
-    
-    await set(sessionRef, {
-      ...session,
-      uid: user.uid,
-    });
-    
+    await set(sessionRef, { ...session, uid: user.uid });
     setCurrentSession(session);
     setIsRecording(true);
     telemetryBuffer.current = [];
-  };
+  }, [user]);
 
-  const stopSession = async () => {
-    if (!currentSession || !currentSession.id) return;
-    
+  const stopSession = useCallback(async () => {
+    const session = currentSessionRef.current;
+    if (!session?.id) return;
     setIsRecording(false);
-    
-    // Upload remaining telemetry
-    if (telemetryBuffer.current.length > 0) {
-      await uploadTelemetryBatch();
-    }
-    
-    // Update session with end time and summary
-    const sessionRef = ref(database, `reycinUSA/obd/sessions/${currentSession.id}`);
+    if (telemetryBuffer.current.length > 0) await uploadTelemetryBatch();
+    const sessionRef = ref(database, `reycinUSA/obd/sessions/${session.id}`);
     await set(sessionRef, {
-      ...currentSession,
+      ...session,
       endedAt: Date.now(),
       logSummary: {
         samples: telemetryBuffer.current.length,
-        durationSec: Math.floor((Date.now() - currentSession.startedAt) / 1000),
+        durationSec: Math.floor((Date.now() - session.startedAt) / 1000),
       },
     });
-    
     setCurrentSession(null);
     telemetryBuffer.current = [];
-  };
+  }, [uploadTelemetryBatch]);
 
-  const uploadTelemetryBatch = async () => {
-    if (!currentSession?.id || telemetryBuffer.current.length === 0) return;
-    
-    const batch = telemetryBuffer.current.splice(0, 10);
-    const logRef = ref(database, `reycinUSA/obd/sessionLogs/${currentSession.id}`);
-    
-    const updates: Record<string, TelemetryData> = {};
-    batch.forEach((data) => {
-      updates[`t_${data.t}`] = data;
-    });
-    
-    await set(logRef, updates);
-  };
-
-  return {
+  return useMemo(() => ({
     connectionType,
     connectionStatus,
     telemetry,
@@ -326,13 +297,22 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
     currentSession,
     isRecording,
     firmwareVersion,
+    pollRate,
+    rawHistory,
     connect,
     disconnect,
     readDTCs,
     clearDTCs,
     sendActuation,
+    sendRaw,
+    setPollRate,
     startSession,
     stopSession,
     isConnected: connectionStatus === "connected",
-  };
+  }), [
+    connectionType, connectionStatus, telemetry, activeDTCs, pendingDTCs,
+    currentSession, isRecording, firmwareVersion, pollRate, rawHistory,
+    connect, disconnect, readDTCs, clearDTCs, sendActuation, sendRaw,
+    setPollRate, startSession, stopSession,
+  ]);
 });
