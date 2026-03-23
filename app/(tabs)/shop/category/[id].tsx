@@ -23,6 +23,7 @@ interface Product {
   active: boolean;
   stock?: number;
   compat?: string[];
+  buyUrl?: string;
 }
 
 export default function CategoryScreen() {
@@ -146,6 +147,17 @@ export default function CategoryScreen() {
                       {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
                     </Text>
                   )}
+                  <View style={[
+                    styles.availBadge,
+                    product.buyUrl ? styles.availBadgeOn : styles.availBadgeOff
+                  ]}>
+                    <Text style={[
+                      styles.availBadgeText,
+                      product.buyUrl ? styles.availBadgeTextOn : styles.availBadgeTextOff
+                    ]}>
+                      {product.buyUrl ? 'Available' : 'Coming Soon'}
+                    </Text>
+                  </View>
                 </View>
               </TouchableOpacity>
             ))}
@@ -243,5 +255,33 @@ const styles = StyleSheet.create({
     color: theme.colors.textGray,
     fontSize: 11,
     marginTop: 4,
+  },
+  availBadge: {
+    alignSelf: 'flex-start' as const,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginTop: 6,
+  },
+  availBadgeOn: {
+    backgroundColor: 'rgba(52,199,89,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(52,199,89,0.3)',
+  },
+  availBadgeOff: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  availBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    letterSpacing: 0.3,
+  },
+  availBadgeTextOn: {
+    color: '#34C759',
+  },
+  availBadgeTextOff: {
+    color: theme.colors.textGray,
   },
 });

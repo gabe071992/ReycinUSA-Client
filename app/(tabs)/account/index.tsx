@@ -23,6 +23,7 @@ import {
   Check,
 } from "lucide-react-native";
 import { useAuth } from "@/providers/AuthProvider";
+import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 
 export default function AccountScreen() {
@@ -69,8 +70,8 @@ export default function AccountScreen() {
     {
       icon: Package,
       title: "Orders",
-      subtitle: "View order history",
-      onPress: () => {},
+      subtitle: "View order history & invoices",
+      onPress: () => router.push("/orders" as any),
     },
   ];
 

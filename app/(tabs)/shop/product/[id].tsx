@@ -36,6 +36,8 @@ interface Product {
     [key: string]: string[] | undefined;
   };
   description?: string;
+  buyUrl?: string;
+  sku?: string;
 }
 
 const SPEC_ICONS: Record<string, any> = {
@@ -357,21 +359,23 @@ export default function ProductDetailScreen() {
                 )}
               </TouchableOpacity>
             </Animated.View>
-            <TouchableOpacity
-              style={[styles.cartButton, addToCartMutation.isPending && styles.buttonDisabled]}
-              onPress={() => addToCartMutation.mutate()}
-              disabled={addToCartMutation.isPending || product.stock === 0}
-              activeOpacity={0.8}
-              testID="add-to-cart-btn"
-            >
-              {addToCartMutation.isPending ? (
-                <ActivityIndicator size="small" color={theme.colors.black} />
-              ) : (
-                <ShoppingCart size={20} color={theme.colors.black} strokeWidth={1.8} />
-              )}
-            </TouchableOpacity>
+            {product.buyUrl ? (
+              <TouchableOpacity
+                style={[styles.cartButton, addToCartMutation.isPending && styles.buttonDisabled]}
+                onPress={() => addToCartMutation.mutate()}
+                disabled={addToCartMutation.isPending || product.stock === 0}
+                activeOpacity={0.8}
+                testID="add-to-cart-btn"
+              >
+                {addToCartMutation.isPending ? (
+                  <ActivityIndicator size="small" color={theme.colors.black} />
+                ) : (
+                  <ShoppingCart size={20} color={theme.colors.black} strokeWidth={1.8} />
+                )}
+              </TouchableOpacity>
+            ) : null}
           </View>
-        ) : (
+        ) : product.buyUrl ? (
           <TouchableOpacity
             style={[styles.addToCartButton, addToCartMutation.isPending && styles.buttonDisabled]}
             onPress={() => addToCartMutation.mutate()}
@@ -390,6 +394,10 @@ export default function ProductDetailScreen() {
               </>
             )}
           </TouchableOpacity>
+        ) : (
+          <View style={styles.unavailableButton}>
+            <Text style={styles.unavailableText}>Not Yet Available</Text>
+          </View>
         )}
       </View>
     </View>
@@ -740,5 +748,21 @@ const styles = StyleSheet.create({
     color: theme.colors.black,
     fontSize: 16,
     fontWeight: '700',
+  },
+  unavailableButton: {
+    backgroundColor: theme.colors.darkGray,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGray,
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 16,
+    borderRadius: theme.borderRadius.md,
+  },
+  unavailableText: {
+    color: theme.colors.textGray,
+    fontSize: 15,
+    fontWeight: '600' as const,
+    letterSpacing: 0.3,
   },
 });

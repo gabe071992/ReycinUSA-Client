@@ -96,7 +96,7 @@ export default function ShopScreen() {
       {cartCount > 0 && (
         <TouchableOpacity 
           style={styles.cartBanner}
-          onPress={() => {}}
+          onPress={() => router.push('/cart' as any)}
         >
           <View style={styles.cartBannerContent}>
             <ShoppingBag size={20} color={theme.colors.black} />

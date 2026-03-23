@@ -11,6 +11,7 @@ import {
 } from "firebase/auth";
 import { ref, set, get } from "firebase/database";
 import { auth, database } from "@/config/firebase";
+import { brgAuth } from "@/config/firebase-brg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
@@ -183,6 +184,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         createdAt: Date.now(),
       };
       await set(profileRef, newProfile);
+      try {
+        await createUserWithEmailAndPassword(brgAuth, email, password);
+        console.log("BRG invoice account created alongside primary account");
+      } catch (brgErr: any) {
+        console.log("BRG parallel account note:", brgErr.code);
+      }
       return credential.user;
     } catch (err: any) {
       setError(err.message);
