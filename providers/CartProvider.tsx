@@ -1,6 +1,6 @@
 import createContextHook from "@nkzw/create-context-hook";
-import { useState, useEffect } from "react";
-import { ref, set, get, onValue } from "firebase/database";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { ref, set, onValue } from "firebase/database";
 import { database } from "@/config/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,21 +11,19 @@ interface CartItem {
   price: number;
   name: string;
   image?: string;
+  selectedOptions?: Record<string, string>;
 }
 
 export const [CartProvider, useCart] = createContextHook(() => {
   const { user } = useAuth();
   const [items, setItems] = useState<Record<string, CartItem>>({});
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!user) {
-      // Load guest cart from AsyncStorage
-      loadGuestCart();
+      void loadGuestCart();
       return;
     }
 
-    // Sync with Firebase for authenticated users
     const cartRef = ref(database, `reycinUSA/cart/${user.uid}`);
     const unsubscribe = onValue(cartRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -48,80 +46,80 @@ export const [CartProvider, useCart] = createContextHook(() => {
     }
   };
 
-  const saveCart = async (newItems: Record<string, CartItem>) => {
+  const saveCart = useCallback(async (newItems: Record<string, CartItem>) => {
     if (user) {
-      // Save to Firebase
       const cartRef = ref(database, `reycinUSA/cart/${user.uid}`);
       await set(cartRef, {
         items: newItems,
         updatedAt: Date.now(),
       });
     } else {
-      // Save to AsyncStorage for guests
       await AsyncStorage.setItem("guestCart", JSON.stringify(newItems));
     }
     setItems(newItems);
-  };
+  }, [user]);
 
-  const addItem = async (product: any) => {
+  const addItem = useCallback(async (product: any, selectedOptions?: Record<string, string>) => {
     const newItems = { ...items };
-    const productId = product.id;
-    
-    if (newItems[productId]) {
-      newItems[productId].quantity += 1;
+    const optionsSuffix = selectedOptions ? `_${Object.values(selectedOptions).join('_')}` : '';
+    const cartKey = `${product.id}${optionsSuffix}`;
+
+    if (newItems[cartKey]) {
+      newItems[cartKey].quantity += 1;
     } else {
-      newItems[productId] = {
-        productId,
+      newItems[cartKey] = {
+        productId: product.id,
         quantity: 1,
         price: product.price,
         name: product.name,
         image: product.media?.[0],
+        selectedOptions,
       };
     }
-    
-    await saveCart(newItems);
-  };
 
-  const removeItem = async (productId: string) => {
+    await saveCart(newItems);
+  }, [items, saveCart]);
+
+  const removeItem = useCallback(async (cartKey: string) => {
     const newItems = { ...items };
-    delete newItems[productId];
+    delete newItems[cartKey];
     await saveCart(newItems);
-  };
+  }, [items, saveCart]);
 
-  const updateQuantity = async (productId: string, quantity: number) => {
+  const updateQuantity = useCallback(async (cartKey: string, quantity: number) => {
     if (quantity <= 0) {
-      await removeItem(productId);
+      await removeItem(cartKey);
       return;
     }
-    
+
     const newItems = { ...items };
-    if (newItems[productId]) {
-      newItems[productId].quantity = quantity;
+    if (newItems[cartKey]) {
+      newItems[cartKey].quantity = quantity;
       await saveCart(newItems);
     }
-  };
+  }, [items, saveCart, removeItem]);
 
-  const clearCart = async () => {
+  const clearCart = useCallback(async () => {
     await saveCart({});
-  };
+  }, [saveCart]);
 
-  const getTotal = () => {
+  const getTotal = useCallback(() => {
     return Object.values(items).reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
-  };
+  }, [items]);
 
-  const getItemCount = () => {
+  const getItemCount = useCallback(() => {
     return Object.values(items).reduce(
       (sum, item) => sum + item.quantity,
       0
     );
-  };
+  }, [items]);
 
-  return {
+  return useMemo(() => ({
     items,
-    loading,
+    loading: false,
     addItem,
     removeItem,
     updateQuantity,
@@ -129,5 +127,5 @@ export const [CartProvider, useCart] = createContextHook(() => {
     getTotal,
     getItemCount,
     isEmpty: Object.keys(items).length === 0,
-  };
+  }), [items, addItem, removeItem, updateQuantity, clearCart, getTotal, getItemCount]);
 });

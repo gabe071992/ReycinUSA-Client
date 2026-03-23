@@ -27,9 +27,15 @@ interface UserProfile {
 }
 
 interface Vehicle {
+  productId: string;
   model: string;
-  vin: string;
-  year: number;
+  color?: string;
+  package?: string;
+  year?: number;
+  vin?: string;
+  image?: string;
+  specs?: Record<string, any>;
+  addedAt: number;
 }
 
 interface Address {
@@ -165,6 +171,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   }, [user, profile]);
 
+  const addVehicle = useCallback(async (vehicle: Omit<Vehicle, 'addedAt'>) => {
+    if (!user || !profile) return;
+    try {
+      const vehicleId = `${vehicle.productId}_${Date.now()}`;
+      const newVehicle: Vehicle = { ...vehicle, addedAt: Date.now() };
+      const existing = profile.vehicles || {};
+      const updated = { ...profile, vehicles: { ...existing, [vehicleId]: newVehicle } };
+      const profileRef = ref(database, `reycinUSA/users/${user.uid}`);
+      await set(profileRef, updated);
+      setProfile(updated);
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  }, [user, profile]);
+
   const changePassword = useCallback(async (newPassword: string) => {
     if (!user) return;
     try {
@@ -187,9 +209,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signUp,
     signOut,
     updateProfile,
+    addVehicle,
     changePassword,
     isAuthenticated: !!user,
     isEmailVerified: user?.emailVerified || false,
     hasRole,
-  }), [user, profile, loading, error, rememberMe, signIn, signUp, signOut, updateProfile, changePassword, hasRole]);
+  }), [user, profile, loading, error, rememberMe, signIn, signUp, signOut, updateProfile, addVehicle, changePassword, hasRole]);
 });
