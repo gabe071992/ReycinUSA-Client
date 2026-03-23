@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { CartProvider } from "@/providers/CartProvider";
 import { OBDProvider } from "@/providers/OBDProvider";
+import { LapTimerProvider } from "@/providers/LapTimerProvider";
 import { BRGAuthProvider } from "@/providers/BRGAuthProvider";
 
 void SplashScreen.preventAutoHideAsync();
@@ -51,7 +52,9 @@ export default function RootLayout() {
           <BRGAuthProvider>
             <CartProvider>
               <OBDProvider>
-                <RootLayoutNav />
+                <LapTimerProvider>
+                  <RootLayoutNav />
+                </LapTimerProvider>
               </OBDProvider>
             </CartProvider>
           </BRGAuthProvider>

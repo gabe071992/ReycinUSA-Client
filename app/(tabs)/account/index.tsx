@@ -21,13 +21,28 @@ import {
   Pencil,
   X,
   Check,
+  Timer,
 } from "lucide-react-native";
+import { useLapTimer } from "@/providers/LapTimerProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 
+function fmtLap(ms: number): string {
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  const cents = Math.floor((ms % 1000) / 10);
+  return `${mins > 0 ? `${mins}:` : ""}${String(secs).padStart(2, "0")}.${String(cents).padStart(2, "0")}`;
+}
+
 export default function AccountScreen() {
   const { profile, signOut, updateProfile } = useAuth();
+  const { savedSessions } = useLapTimer();
+
+  const allTimeBest = savedSessions.reduce<number | null>((best, s) => {
+    if (s.bestLap === null) return best;
+    return best === null || s.bestLap < best ? s.bestLap : best;
+  }, null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -72,6 +87,14 @@ export default function AccountScreen() {
       title: "Orders",
       subtitle: "View order history & invoices",
       onPress: () => router.push("/orders" as any),
+    },
+    {
+      icon: Timer,
+      title: "Race Sessions",
+      subtitle: savedSessions.length > 0
+        ? `${savedSessions.length} saved${allTimeBest !== null ? ` · Best: ${fmtLap(allTimeBest)}` : ""}`
+        : "View lap times & session history",
+      onPress: () => router.push("/account/sessions" as any),
     },
   ];
 

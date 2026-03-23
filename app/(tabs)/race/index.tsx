@@ -9,6 +9,10 @@ import {
   Platform,
   PanResponder,
   FlatList,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Pressable,
 } from "react-native";
 import LeafletMapView, { LeafletMapHandle } from "@/components/LeafletMapView";
 import * as Location from "expo-location";
@@ -31,9 +35,11 @@ import {
   BookmarkPlus,
   Mic,
   Check,
+  Timer,
 } from "lucide-react-native";
 import TuningConsole from "@/app/(tabs)/race/tuning";
 import { useOBD } from "@/providers/OBDProvider";
+import { useLapTimer } from "@/providers/LapTimerProvider";
 
 type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit";
 
@@ -1243,28 +1249,8 @@ function DigitalDashScreen() {
     };
   }, [isDemo]);
 
-  // ── Live telemetry lap timer ───────────────────────────────────────────────
-  const liveLapStartRef = useRef(0);
-  const [liveLapTime, setLiveLapTime] = useState(0);
-  const [liveLastLap, setLiveLastLap] = useState<number | null>(null);
-  const liveLapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (isConnected && !isDemo) {
-      if (!liveLapStartRef.current) liveLapStartRef.current = Date.now();
-      liveLapIntervalRef.current = setInterval(() => {
-        setLiveLapTime(Date.now() - liveLapStartRef.current);
-      }, 50);
-    } else {
-      if (liveLapIntervalRef.current) clearInterval(liveLapIntervalRef.current);
-      if (!isConnected) {
-        liveLapStartRef.current = 0;
-        setLiveLapTime(0);
-        setLiveLastLap(null);
-      }
-    }
-    return () => { if (liveLapIntervalRef.current) clearInterval(liveLapIntervalRef.current); };
-  }, [isConnected, isDemo]);
+  // ── Shared lap timer (persists across race tabs) ───────────────────────────
+  const { elapsed: timerElapsed, lastLap: timerLastLap } = useLapTimer();
 
   // ── Resolved display values ────────────────────────────────────────────────
   const isLive = isConnected && !isDemo;
@@ -1277,8 +1263,8 @@ function DigitalDashScreen() {
   const intake     = isDemo ? demoIntake     : (telemetry?.iat_c ?? undefined);
   const voltage    = isDemo ? demoVoltage    : (telemetry?.vbat ?? undefined);
   const gear       = isDemo ? demoGear       : (rpm !== undefined ? estimateGear(rpm) : undefined);
-  const displayLap = isDemo ? lapTime        : liveLapTime;
-  const displayLastLap = isDemo ? lastLap   : liveLastLap;
+  const displayLap = isDemo ? lapTime : timerElapsed;
+  const displayLastLap = isDemo ? lastLap : timerLastLap;
 
   const rpmSafe  = rpm ?? 0;
   const rpmPct   = rpmSafe / MAX_RPM;
@@ -1701,192 +1687,428 @@ const dashStyles = StyleSheet.create({
   },
 });
 
+const QUICK_TRACKS_SAVE = [
+  "Hallett Motor Racing Circuit",
+  "Circuit of The Americas",
+  "WeatherTech Raceway Laguna Seca",
+  "Nürburgring Nordschleife",
+  "Virginia International Raceway",
+  "Michelin Raceway Road Atlanta",
+];
+
 function LapTimerScreen() {
-  const [running, setRunning] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [laps, setLaps] = useState<number[]>([]);
+  const {
+    running,
+    elapsed,
+    laps,
+    currentLapElapsed,
+    bestLap,
+    start,
+    stop,
+    lap,
+    reset,
+    saveSession,
+  } = useLapTimer();
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startRef = useRef(0);
-  const lapStartRef = useRef(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [trackName, setTrackName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [savedConfirm, setSavedConfirm] = useState(false);
 
-  const startPulse = useCallback(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [pulseAnim]);
-
-  const stopPulse = useCallback(() => {
-    pulseAnim.stopAnimation();
-    Animated.timing(pulseAnim, {
-      toValue: 1,
-      duration: 150,
-      useNativeDriver: true,
-    }).start();
-  }, [pulseAnim]);
-
-  const handleStart = useCallback(() => {
-    const now = Date.now();
-    startRef.current = now - elapsed;
-    lapStartRef.current = now - laps.reduce((a, b) => a + b, 0);
-    setRunning(true);
-    startPulse();
-    intervalRef.current = setInterval(() => {
-      setElapsed(Date.now() - startRef.current);
-    }, 50);
-  }, [elapsed, laps, startPulse]);
-
-  const handleStop = useCallback(() => {
-    setRunning(false);
-    stopPulse();
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+  useEffect(() => {
+    if (running) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.stopAnimation();
+      Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
     }
-  }, [stopPulse]);
+  }, [running, pulseAnim]);
 
-  const handleLap = useCallback(() => {
-    const now = Date.now();
-    const lapTime = now - lapStartRef.current;
-    setLaps((prev) => [lapTime, ...prev]);
-    lapStartRef.current = now;
-  }, []);
+  const handleSave = useCallback(() => {
+    saveSession(trackName || "Unknown Track", null, notes || undefined);
+    setSavedConfirm(true);
+    setTimeout(() => {
+      setShowSaveModal(false);
+      setSavedConfirm(false);
+      setTrackName("");
+      setNotes("");
+    }, 1200);
+  }, [saveSession, trackName, notes]);
 
-  const handleReset = useCallback(() => {
-    handleStop();
-    setElapsed(0);
-    setLaps([]);
-    startRef.current = 0;
-    lapStartRef.current = 0;
-  }, [handleStop]);
-
-  const bestLap = laps.length > 0 ? Math.min(...laps) : null;
-  const lapElapsed = elapsed - laps.reduce((a, b) => a + b, 0);
+  const canSave = !running && (laps.length > 0 || elapsed > 0);
 
   return (
-    <ScrollView style={lapStyles.container} showsVerticalScrollIndicator={false}>
-      <View style={lapStyles.clockBlock}>
-        <View style={lapStyles.clockHeader}>
-          <Animated.View
-            style={[
-              lapStyles.liveDot,
-              { transform: [{ scale: pulseAnim }], opacity: running ? 1 : 0 },
-            ]}
-          />
-          <Text style={lapStyles.clockHeaderText}>
-            {running ? "LIVE" : "LAP TIMER"}
-          </Text>
-        </View>
-        <Text style={lapStyles.clockDisplay}>{formatTimeColon(elapsed)}</Text>
-        {laps.length > 0 && running && (
-          <Text style={lapStyles.currentLap}>
-            LAP {laps.length + 1} &nbsp;·&nbsp; {formatTime(lapElapsed)}
-          </Text>
-        )}
-        <View style={lapStyles.controls}>
-          <TouchableOpacity
-            style={[
-              lapStyles.sideBtn,
-              (elapsed === 0 || running) && lapStyles.btnDisabled,
-            ]}
-            onPress={handleReset}
-            disabled={elapsed === 0 || running}
-            activeOpacity={0.7}
-          >
-            <RotateCcw
-              size={20}
-              color={elapsed === 0 || running ? "#2a2a2a" : "#888"}
-              strokeWidth={2}
+    <>
+      <ScrollView style={lapStyles.container} showsVerticalScrollIndicator={false}>
+        <View style={lapStyles.clockBlock}>
+          <View style={lapStyles.clockHeader}>
+            <Animated.View
+              style={[
+                lapStyles.liveDot,
+                { transform: [{ scale: pulseAnim }], opacity: running ? 1 : 0 },
+              ]}
             />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[lapStyles.mainBtn, running && lapStyles.mainBtnStop]}
-            onPress={running ? handleStop : handleStart}
-            activeOpacity={0.85}
-          >
-            {running ? (
-              <Square size={22} fill="#fff" color="#fff" strokeWidth={0} />
-            ) : (
-              <Play size={24} fill="#000" color="#000" strokeWidth={0} />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[lapStyles.sideBtn, !running && lapStyles.btnDisabled]}
-            onPress={handleLap}
-            disabled={!running}
-            activeOpacity={0.7}
-          >
-            <Flag
-              size={20}
-              color={running ? "#fff" : "#2a2a2a"}
-              strokeWidth={2}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {laps.length > 0 && (
-        <View style={lapStyles.lapsSection}>
-          <View style={lapStyles.lapsHeader}>
-            <Text style={lapStyles.lapsTitle}>LAP TIMES</Text>
-            {bestLap !== null && (
-              <View style={lapStyles.bestBadge}>
-                <TrendingUp size={11} color="#34C759" strokeWidth={2} />
-                <Text style={lapStyles.bestBadgeText}>
-                  BEST {formatTime(bestLap)}
-                </Text>
-              </View>
-            )}
+            <Text style={lapStyles.clockHeaderText}>
+              {running ? "LIVE" : "LAP TIMER"}
+            </Text>
           </View>
-          {laps.map((lap, i) => {
-            const lapNum = laps.length - i;
-            const isBest = lap === bestLap;
-            const isWorst = laps.length > 2 && lap === Math.max(...laps);
-            return (
-              <View
-                key={i}
-                style={[lapStyles.lapRow, isBest && lapStyles.lapRowBest]}
-              >
-                <Text style={lapStyles.lapNum}>
-                  L{String(lapNum).padStart(2, "0")}
-                </Text>
-                <Text
-                  style={[
-                    lapStyles.lapTime,
-                    isBest && { color: "#34C759" },
-                    isWorst && !isBest && { color: "#FF3B30" },
-                  ]}
-                >
-                  {formatTime(lap)}
-                </Text>
-                {isBest && (
-                  <View style={lapStyles.bestPill}>
-                    <Text style={lapStyles.bestPillText}>BEST</Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
+          <Text style={lapStyles.clockDisplay}>{formatTimeColon(elapsed)}</Text>
+          {laps.length > 0 && running && (
+            <Text style={lapStyles.currentLap}>
+              LAP {laps.length + 1} &nbsp;·&nbsp; {formatTime(currentLapElapsed)}
+            </Text>
+          )}
+          <View style={lapStyles.controls}>
+            <TouchableOpacity
+              style={[lapStyles.sideBtn, (elapsed === 0 || running) && lapStyles.btnDisabled]}
+              onPress={reset}
+              disabled={elapsed === 0 || running}
+              activeOpacity={0.7}
+              testID="lap-timer-reset"
+            >
+              <RotateCcw size={20} color={elapsed === 0 || running ? "#2a2a2a" : "#888"} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[lapStyles.mainBtn, running && lapStyles.mainBtnStop]}
+              onPress={running ? stop : start}
+              activeOpacity={0.85}
+              testID="lap-timer-main"
+            >
+              {running ? (
+                <Square size={22} fill="#fff" color="#fff" strokeWidth={0} />
+              ) : (
+                <Play size={24} fill="#000" color="#000" strokeWidth={0} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[lapStyles.sideBtn, !running && lapStyles.btnDisabled]}
+              onPress={lap}
+              disabled={!running}
+              activeOpacity={0.7}
+              testID="lap-timer-lap"
+            >
+              <Flag size={20} color={running ? "#fff" : "#2a2a2a"} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+
+          {canSave && (
+            <TouchableOpacity
+              style={lapStyles.saveBtn}
+              onPress={() => setShowSaveModal(true)}
+              activeOpacity={0.8}
+              testID="save-session-btn"
+            >
+              <BookmarkPlus size={14} color="#FF1801" strokeWidth={2} />
+              <Text style={lapStyles.saveBtnText}>SAVE SESSION</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      )}
-      <View style={{ height: 60 }} />
-    </ScrollView>
+
+        {laps.length > 0 && (
+          <View style={lapStyles.lapsSection}>
+            <View style={lapStyles.lapsHeader}>
+              <Text style={lapStyles.lapsTitle}>LAP TIMES</Text>
+              {bestLap !== null && (
+                <View style={lapStyles.bestBadge}>
+                  <TrendingUp size={11} color="#34C759" strokeWidth={2} />
+                  <Text style={lapStyles.bestBadgeText}>BEST {formatTime(bestLap)}</Text>
+                </View>
+              )}
+            </View>
+            {laps.map((lapMs, i) => {
+              const lapNum = laps.length - i;
+              const isBest = lapMs === bestLap;
+              const isWorst = laps.length > 2 && lapMs === Math.max(...laps);
+              return (
+                <View key={i} style={[lapStyles.lapRow, isBest && lapStyles.lapRowBest]}>
+                  <Text style={lapStyles.lapNum}>L{String(lapNum).padStart(2, "0")}</Text>
+                  <Text
+                    style={[
+                      lapStyles.lapTime,
+                      isBest && { color: "#34C759" },
+                      isWorst && !isBest && { color: "#FF3B30" },
+                    ]}
+                  >
+                    {formatTime(lapMs)}
+                  </Text>
+                  {isBest && (
+                    <View style={lapStyles.bestPill}>
+                      <Text style={lapStyles.bestPillText}>BEST</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+        <View style={{ height: 80 }} />
+      </ScrollView>
+
+      <Modal
+        visible={showSaveModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSaveModal(false)}
+        statusBarTranslucent
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={saveModalStyles.overlay}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowSaveModal(false)} />
+          <View style={saveModalStyles.sheet}>
+            <View style={saveModalStyles.handle} />
+            <View style={saveModalStyles.header}>
+              <View style={saveModalStyles.headerLeft}>
+                <Timer size={15} color="#FF1801" strokeWidth={2} />
+                <Text style={saveModalStyles.headerTitle}>SAVE SESSION</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowSaveModal(false)}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                <X size={20} color="#444" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={saveModalStyles.summaryRow}>
+              <View style={saveModalStyles.summaryCell}>
+                <Text style={saveModalStyles.summaryLabel}>LAPS</Text>
+                <Text style={saveModalStyles.summaryValue}>{laps.length}</Text>
+              </View>
+              <View style={saveModalStyles.summaryDivider} />
+              <View style={saveModalStyles.summaryCell}>
+                <Text style={saveModalStyles.summaryLabel}>BEST LAP</Text>
+                <Text style={[saveModalStyles.summaryValue, { color: "#34C759" }]}>
+                  {bestLap !== null ? formatTime(bestLap) : "—"}
+                </Text>
+              </View>
+              <View style={saveModalStyles.summaryDivider} />
+              <View style={saveModalStyles.summaryCell}>
+                <Text style={saveModalStyles.summaryLabel}>TOTAL</Text>
+                <Text style={saveModalStyles.summaryValue}>{formatTime(elapsed)}</Text>
+              </View>
+            </View>
+
+            <View style={saveModalStyles.fieldSection}>
+              <Text style={saveModalStyles.fieldLabel}>TRACK</Text>
+              <TextInput
+                style={saveModalStyles.input}
+                value={trackName}
+                onChangeText={setTrackName}
+                placeholder="Track name..."
+                placeholderTextColor="#2a2a2a"
+                autoCorrect={false}
+                testID="session-track-input"
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={saveModalStyles.chipsScroll}
+                contentContainerStyle={saveModalStyles.chipsContent}
+              >
+                {QUICK_TRACKS_SAVE.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[saveModalStyles.chip, trackName === t && saveModalStyles.chipActive]}
+                    onPress={() => setTrackName(t)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[saveModalStyles.chipText, trackName === t && saveModalStyles.chipTextActive]}>
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={saveModalStyles.fieldSection}>
+              <Text style={saveModalStyles.fieldLabel}>NOTES (OPTIONAL)</Text>
+              <TextInput
+                style={[saveModalStyles.input, saveModalStyles.inputMulti]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Conditions, setup, comments..."
+                placeholderTextColor="#2a2a2a"
+                multiline
+                numberOfLines={2}
+                testID="session-notes-input"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[saveModalStyles.saveBtn, savedConfirm && saveModalStyles.saveBtnConfirmed]}
+              onPress={handleSave}
+              disabled={savedConfirm}
+              activeOpacity={0.85}
+              testID="confirm-save-session-btn"
+            >
+              {savedConfirm ? (
+                <>
+                  <Check size={16} color="#000" strokeWidth={2.5} />
+                  <Text style={saveModalStyles.saveBtnText}>SAVED</Text>
+                </>
+              ) : (
+                <>
+                  <BookmarkPlus size={16} color="#000" strokeWidth={2} />
+                  <Text style={saveModalStyles.saveBtnText}>SAVE SESSION</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
 }
+
+const saveModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.7)",
+  },
+  sheet: {
+    backgroundColor: "#080808",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    borderColor: "#1a1a1a",
+    padding: 20,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#222",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 4,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFF",
+    letterSpacing: 2,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    backgroundColor: "#0d0d0d",
+    borderWidth: 1,
+    borderColor: "#1a1a1a",
+    borderRadius: 10,
+    padding: 16,
+  },
+  summaryCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: 5,
+  },
+  summaryDivider: {
+    width: 1,
+    backgroundColor: "#1a1a1a",
+  },
+  summaryLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#333",
+    letterSpacing: 1.5,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: "300",
+    color: "#FFF",
+    fontVariant: ["tabular-nums"] as const,
+    letterSpacing: -0.5,
+  },
+  fieldSection: {
+    gap: 8,
+  },
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#333",
+    letterSpacing: 1.5,
+  },
+  input: {
+    backgroundColor: "#0d0d0d",
+    borderWidth: 1,
+    borderColor: "#1e1e1e",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 14,
+    color: "#FFF",
+    letterSpacing: -0.2,
+  },
+  inputMulti: {
+    height: 64,
+    textAlignVertical: "top",
+  },
+  chipsScroll: {
+    marginTop: 2,
+  },
+  chipsContent: {
+    gap: 6,
+    paddingRight: 8,
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: "#1e1e1e",
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "#0d0d0d",
+  },
+  chipActive: {
+    borderColor: "#FF1801",
+    backgroundColor: "rgba(255,24,1,0.08)",
+  },
+  chipText: {
+    fontSize: 10,
+    color: "#444",
+    fontWeight: "600",
+  },
+  chipTextActive: {
+    color: "#FF1801",
+  },
+  saveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    paddingVertical: 15,
+    marginTop: 4,
+  },
+  saveBtnConfirmed: {
+    backgroundColor: "#34C759",
+  },
+  saveBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#000",
+    letterSpacing: 1,
+  },
+});
 
 const lapStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
@@ -2035,7 +2257,28 @@ const lapStyles = StyleSheet.create({
     color: "#34C759",
     letterSpacing: 1,
   },
+  saveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#2a0a00",
+    backgroundColor: "rgba(255,24,1,0.06)",
+    borderRadius: 8,
+    paddingVertical: 11,
+    marginTop: 8,
+    alignSelf: "center",
+    paddingHorizontal: 24,
+  },
+  saveBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FF1801",
+    letterSpacing: 1.5,
+  },
 });
+
 
 type PITSubTab = "comms" | "messages" | "log";
 type MsgPriority = "critical" | "high" | "normal" | "info";

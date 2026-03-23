@@ -25,6 +25,13 @@ export default function AccountLayout() {
           headerTitleAlign: "center",
         }} 
       />
+      <Stack.Screen
+        name="sessions"
+        options={{
+          title: "Race Sessions",
+          headerTitleAlign: "center",
+        }}
+      />
     </Stack>
   );
 }
