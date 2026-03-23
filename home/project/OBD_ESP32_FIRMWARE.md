@@ -1,41 +1,83 @@
-# OBD II ESP32 Firmware Specification
+# Reycin Vehicle Node Firmware Specification
+
+**Version:** 2.0.0  
+**Device Role:** Vehicle-mounted OBD + GPS + Mesh Telemetry Node  
+**Target Hardware:** ESP32-WROOM-32  
+**Communication:** WebSocket (to mobile app) + ESP-NOW (to Marshal/Hub nodes)
+
+---
 
 ## Overview
-This document provides the complete Arduino (.ino) firmware for the ESP32-based OBD II adapter that communicates with the Reycin USA mobile application.
+
+The Vehicle Node is the ESP32 unit physically installed on the vehicle. It serves three simultaneous roles:
+
+1. **OBD Bridge** — Reads engine/ECU data via ELM327 and streams to the connected mobile app over WiFi WebSocket
+2. **GPS Telemetry Source** — Reads GPS position via UART-connected GPS module and includes it in every telemetry frame
+3. **Mesh Network Participant** — Broadcasts combined OBD+GPS telemetry to nearby Marshal Nodes (or directly to Hub if in range) via ESP-NOW
+
+### Critical Design Rule — No-OBD Graceful Degradation
+
+**The firmware must never block, halt, or reduce functionality because OBD data is unavailable.**  
+This is a hard requirement for development and testing phases where the OBD harness may not be connected, or the development vehicle may not respond to specific PIDs.
+
+Three distinct OBD states are tracked independently:
+
+| State | Description | Behavior |
+|---|---|---|
+| `OBD_ABSENT` | No ELM327 detected on serial | GPS-only telemetry; all OBD fields omitted from frame |
+| `OBD_CONNECTED_NO_DATA` | ELM327 present, vehicle not responding to PIDs | OBD fields sent as `null`; GPS continues normally |
+| `OBD_CONNECTED_ACTIVE` | ELM327 present, vehicle responding | Full telemetry frame |
+
+The mobile app and all downstream nodes must be designed to accept partial frames where any OBD field may be absent.
+
+---
 
 ## Hardware Requirements
-- ESP32 DevKit (ESP32-WROOM-32)
-- ELM327 or STN1110 OBD II chip
-- ISO 9141-2 K-Line interface
+
+### Required
+- ESP32-WROOM-32 (or ESP32-S3 equivalent)
+- GPS Module — UART (NEO-6M, NEO-M8N, or equivalent at 9600 baud)
+- 12V to 5V/3.3V buck converter
+- OBD II J1962 connector
+
+### Optional (OBD path)
+- ELM327 or STN1110 OBD II chip (ISO 9141-2 K-Line interface)
 - CAN Bus transceiver (MCP2515 or similar)
-- 12V to 3.3V/5V power regulator
-- OBD II connector (J1962)
+
+---
 
 ## Wiring Diagram
+
 ```
-ESP32 Pin   | OBD Component      | Description
-------------|-------------------|------------------
-GPIO 16     | ELM327 TX         | Serial communication
-GPIO 17     | ELM327 RX         | Serial communication
-GPIO 5      | CAN CS            | CAN chip select
+ESP32 Pin   | Component          | Description
+------------|-------------------|---------------------------
+GPIO 16     | ELM327 TX         | OBD serial RX to ESP32
+GPIO 17     | ELM327 RX         | OBD serial TX from ESP32
+GPIO 12     | GPS TX            | GPS serial RX to ESP32
+GPIO 13     | GPS RX            | GPS serial TX from ESP32 (optional)
+GPIO 5      | CAN CS            | CAN chip select (if using MCP2515)
 GPIO 18     | CAN SCK           | SPI clock
 GPIO 19     | CAN MISO          | SPI data in
 GPIO 23     | CAN MOSI          | SPI data out
-GPIO 2      | Status LED        | Connection indicator
+GPIO 2      | Status LED        | Connection indicator (onboard)
+GPIO 4      | Mesh LED          | ESP-NOW activity indicator
 3.3V        | Power Supply      | Logic power
 GND         | Ground            | Common ground
 ```
+
+---
 
 ## Complete Arduino Firmware (.ino)
 
 ```cpp
 /*
- * Reycin USA OBD II ESP32 Firmware
- * Version: 1.0.0
- * Compatible with Reycin USA Mobile App
- * 
- * This firmware creates a WebSocket server that the mobile app connects to
- * for real-time OBD II data streaming.
+ * Reycin USA — Vehicle Node Firmware
+ * Version: 2.0.0
+ * Roles: OBD Bridge + GPS Telemetry + ESP-NOW Mesh Participant
+ *
+ * IMPORTANT: OBD absence or non-response is handled gracefully.
+ * The node continues GPS telemetry and mesh broadcasting regardless
+ * of OBD status. This is required for dev/test environments.
  */
 
 #include <WiFi.h>
@@ -43,677 +85,931 @@ GND         | Ground            | Common ground
 #include <ArduinoJson.h>
 #include <HardwareSerial.h>
 #include <EEPROM.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
 
-// Configuration
-#define FIRMWARE_VERSION "1.0.0"
-#define DEVICE_NAME "Reycin_OBD_"
-#define AP_PASSWORD "reycin123"
-#define WEBSOCKET_PORT 81
-#define OBD_SERIAL Serial2
-#define OBD_BAUD 38400
-#define STATUS_LED 2
-#define EEPROM_SIZE 512
+// ─── Firmware Identity ────────────────────────────────────────────────────────
+#define FIRMWARE_VERSION     "2.0.0"
+#define NODE_TYPE            "vehicle"
+#define DEVICE_NAME          "Reycin_VEH_"
+#define AP_PASSWORD          "reycin123"
 
-// OBD Serial Pins
-#define OBD_RX_PIN 16
-#define OBD_TX_PIN 17
+// ─── Port / Pin Config ────────────────────────────────────────────────────────
+#define WEBSOCKET_PORT       81
+#define STATUS_LED           2
+#define MESH_LED             4
 
-// WebSocket server
-WebSocketsServer webSocket = WebSocketsServer(WEBSOCKET_PORT);
+// OBD serial (Serial2)
+#define OBD_RX_PIN           16
+#define OBD_TX_PIN           17
+#define OBD_BAUD             38400
+#define OBD_SERIAL           Serial2
 
-// Connection state
-bool obdConnected = false;
-bool clientConnected = false;
-unsigned long lastPollTime = 0;
-unsigned long pollInterval = 100; // 10Hz default
+// GPS serial (Serial1)
+#define GPS_RX_PIN           12
+#define GPS_TX_PIN           13
+#define GPS_BAUD             9600
+#define GPS_SERIAL           Serial1
 
-// Telemetry data structure
+// ─── Timing ──────────────────────────────────────────────────────────────────
+#define OBD_POLL_INTERVAL_MS 100   // 10Hz default
+#define GPS_POLL_INTERVAL_MS 250   // 4Hz GPS
+#define MESH_TX_INTERVAL_MS  200   // 5Hz mesh broadcast
+#define OBD_INIT_TIMEOUT_MS  5000  // Give up OBD init after 5s
+#define OBD_PID_TIMEOUT_MS   500   // Per-PID timeout — never block longer
+#define EEPROM_SIZE          512
+
+// ─── OBD State Machine ───────────────────────────────────────────────────────
+typedef enum {
+  OBD_ABSENT,               // ELM327 not detected
+  OBD_CONNECTED_NO_DATA,    // ELM327 present, vehicle not responding
+  OBD_CONNECTED_ACTIVE      // Full OBD communication active
+} OBDState;
+
+OBDState obdState = OBD_ABSENT;
+
+// ─── GPS State ───────────────────────────────────────────────────────────────
+struct GPSData {
+  bool    valid;
+  float   latitude;
+  float   longitude;
+  float   altitude_m;
+  float   speed_kmh;
+  float   heading_deg;
+  uint8_t satellites;
+  char    utc_time[12]; // "HHMMSS.ss"
+};
+
+GPSData gpsData = { false, 0, 0, 0, 0, 0, 0, "" };
+
+// ─── OBD Telemetry ───────────────────────────────────────────────────────────
 struct TelemetryData {
-  int rpm;
-  int ect_c;
-  int iat_c;
-  int map_kpa;
-  float vbat;
-  int throttle_pct;
-  int engine_load;
-  float stft;
-  float ltft;
-  float o2_voltage;
-  String fuel_status;
-  String dtc_codes[10];
-  int dtc_count;
+  bool    rpm_valid;      int   rpm;
+  bool    ect_valid;      int   ect_c;
+  bool    iat_valid;      int   iat_c;
+  bool    map_valid;      int   map_kpa;
+  bool    vbat_valid;     float vbat;
+  bool    tps_valid;      int   throttle_pct;
+  bool    load_valid;     int   engine_load;
+  bool    stft_valid;     float stft;
+  bool    ltft_valid;     float ltft;
+  bool    o2_valid;       float o2_voltage;
+  String  dtc_codes[10];
+  int     dtc_count;
 };
 
-TelemetryData telemetry;
+TelemetryData telemetry = {};
 
-// PID definitions
-struct PID {
-  String code;
-  String name;
-  int bytes;
-  float (*converter)(String);
+// ─── PID Definitions ─────────────────────────────────────────────────────────
+struct PIDDef {
+  const char* code;
+  const char* name;
+  int         bytes;
+  float       (*converter)(const String&);
+  bool*       validFlag;
 };
 
-// PID converters
-float convertRPM(String data) {
-  if (data.length() >= 4) {
-    int a = strtol(data.substring(0, 2).c_str(), NULL, 16);
-    int b = strtol(data.substring(2, 4).c_str(), NULL, 16);
-    return ((a * 256) + b) / 4.0;
-  }
-  return 0;
-}
+float cvtRPM(const String& d)      { if (d.length()<4) return 0; return ((strtol(d.substring(0,2).c_str(),NULL,16)*256)+strtol(d.substring(2,4).c_str(),NULL,16))/4.0; }
+float cvtTemp(const String& d)     { if (d.length()<2) return 0; return strtol(d.substring(0,2).c_str(),NULL,16)-40; }
+float cvtPct(const String& d)      { if (d.length()<2) return 0; return strtol(d.substring(0,2).c_str(),NULL,16)*100.0/255.0; }
+float cvtVolt(const String& d)     { if (d.length()<4) return 0; return ((strtol(d.substring(0,2).c_str(),NULL,16)*256)+strtol(d.substring(2,4).c_str(),NULL,16))/1000.0; }
+float cvtMAP(const String& d)      { if (d.length()<2) return 0; return strtol(d.substring(0,2).c_str(),NULL,16); }
+float cvtFuelTrim(const String& d) { if (d.length()<2) return 0; return ((strtol(d.substring(0,2).c_str(),NULL,16)-128)*100.0)/128.0; }
 
-float convertTemp(String data) {
-  if (data.length() >= 2) {
-    int a = strtol(data.substring(0, 2).c_str(), NULL, 16);
-    return a - 40;
-  }
-  return 0;
-}
-
-float convertPercent(String data) {
-  if (data.length() >= 2) {
-    int a = strtol(data.substring(0, 2).c_str(), NULL, 16);
-    return (a * 100.0) / 255.0;
-  }
-  return 0;
-}
-
-float convertVoltage(String data) {
-  if (data.length() >= 2) {
-    int a = strtol(data.substring(0, 2).c_str(), NULL, 16);
-    return a / 200.0;
-  }
-  return 0;
-}
-
-float convertMAP(String data) {
-  if (data.length() >= 2) {
-    int a = strtol(data.substring(0, 2).c_str(), NULL, 16);
-    return a;
-  }
-  return 0;
-}
-
-float convertFuelTrim(String data) {
-  if (data.length() >= 2) {
-    int a = strtol(data.substring(0, 2).c_str(), NULL, 16);
-    return ((a - 128) * 100.0) / 128.0;
-  }
-  return 0;
-}
-
-// PID list
-PID pids[] = {
-  {"010C", "RPM", 2, convertRPM},
-  {"0105", "ECT", 1, convertTemp},
-  {"010F", "IAT", 1, convertTemp},
-  {"010B", "MAP", 1, convertMAP},
-  {"0142", "VBAT", 2, convertVoltage},
-  {"0111", "THROTTLE", 1, convertPercent},
-  {"0104", "ENGINE_LOAD", 1, convertPercent},
-  {"0106", "STFT", 1, convertFuelTrim},
-  {"0107", "LTFT", 1, convertFuelTrim},
-  {"0114", "O2_VOLTAGE", 1, convertVoltage}
+PIDDef pids[] = {
+  { "010C", "RPM",         2, cvtRPM,      &telemetry.rpm_valid  },
+  { "0105", "ECT",         1, cvtTemp,     &telemetry.ect_valid  },
+  { "010F", "IAT",         1, cvtTemp,     &telemetry.iat_valid  },
+  { "010B", "MAP",         1, cvtMAP,      &telemetry.map_valid  },
+  { "0142", "VBAT",        2, cvtVolt,     &telemetry.vbat_valid },
+  { "0111", "THROTTLE",    1, cvtPct,      &telemetry.tps_valid  },
+  { "0104", "ENGINE_LOAD", 1, cvtPct,      &telemetry.load_valid },
+  { "0106", "STFT",        1, cvtFuelTrim, &telemetry.stft_valid },
+  { "0107", "LTFT",        1, cvtFuelTrim, &telemetry.ltft_valid },
+  { "0114", "O2_VOLTAGE",  1, cvtVolt,     &telemetry.o2_valid   },
 };
-
 const int pidCount = sizeof(pids) / sizeof(pids[0]);
 int currentPidIndex = 0;
 
+// ─── Connectivity ─────────────────────────────────────────────────────────────
+WebSocketsServer webSocket = WebSocketsServer(WEBSOCKET_PORT);
+bool             clientConnected = false;
+unsigned long    lastOBDPoll     = 0;
+unsigned long    lastGPSPoll     = 0;
+unsigned long    lastMeshTx      = 0;
+
+// ─── ESP-NOW ─────────────────────────────────────────────────────────────────
+// Broadcast MAC — all Marshal/Hub nodes in range receive
+uint8_t broadcastMAC[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+esp_now_peer_info_t broadcastPeer = {};
+
+// ─── Lap Timing (local reference) ────────────────────────────────────────────
+// The vehicle node does NOT compute lap times — that is the Hub's responsibility.
+// It does broadcast a session_active flag so Marshal nodes know a timed run is live.
+bool sessionActive = false;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SETUP
+// ─────────────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
   EEPROM.begin(EEPROM_SIZE);
-  
+
   pinMode(STATUS_LED, OUTPUT);
+  pinMode(MESH_LED,   OUTPUT);
   digitalWrite(STATUS_LED, LOW);
-  
-  // Initialize OBD serial
+  digitalWrite(MESH_LED,   LOW);
+
+  GPS_SERIAL.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   OBD_SERIAL.begin(OBD_BAUD, SERIAL_8N1, OBD_RX_PIN, OBD_TX_PIN);
-  
-  // Setup WiFi AP
+
   setupWiFiAP();
-  
-  // Start WebSocket server
+  setupESPNow();
+
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
-  
-  // Initialize OBD
-  initializeOBD();
-  
-  Serial.println("Reycin OBD II Adapter Ready");
-  Serial.print("Connect to WiFi: ");
-  Serial.println(String(DEVICE_NAME) + getDeviceID());
-  Serial.print("WebSocket Port: ");
-  Serial.println(WEBSOCKET_PORT);
+
+  // Attempt OBD init — NEVER block if it fails
+  initOBDNonBlocking();
+
+  Serial.printf("[VEH] Reycin Vehicle Node v%s ready\n", FIRMWARE_VERSION);
+  Serial.printf("[VEH] OBD State: %s\n", obdStateStr());
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  LOOP
+// ─────────────────────────────────────────────────────────────────────────────
 void loop() {
   webSocket.loop();
-  
-  // Poll OBD data if connected
-  if (obdConnected && clientConnected) {
-    unsigned long currentTime = millis();
-    if (currentTime - lastPollTime >= pollInterval) {
-      pollOBDData();
-      lastPollTime = currentTime;
-    }
+
+  unsigned long now = millis();
+
+  // GPS poll — always runs regardless of OBD state
+  if (now - lastGPSPoll >= GPS_POLL_INTERVAL_MS) {
+    pollGPS();
+    lastGPSPoll = now;
   }
-  
-  // Update status LED
+
+  // OBD poll — only if state is ACTIVE or CONNECTED_NO_DATA (to keep probing)
+  if (obdState != OBD_ABSENT && now - lastOBDPoll >= OBD_POLL_INTERVAL_MS) {
+    pollOBDData();
+    lastOBDPoll = now;
+  }
+
+  // Mesh broadcast — always runs; sends whatever data is available
+  if (now - lastMeshTx >= MESH_TX_INTERVAL_MS) {
+    broadcastMeshTelemetry();
+    lastMeshTx = now;
+  }
+
   updateStatusLED();
-  
-  // Handle serial commands for debugging
+
   if (Serial.available()) {
     handleSerialCommand();
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  WIFI + ESP-NOW SETUP
+// ─────────────────────────────────────────────────────────────────────────────
 void setupWiFiAP() {
   String ssid = String(DEVICE_NAME) + getDeviceID();
-  
   WiFi.mode(WIFI_AP);
   WiFi.softAP(ssid.c_str(), AP_PASSWORD);
-  
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
+  Serial.printf("[VEH] AP: %s  IP: %s\n", ssid.c_str(), WiFi.softAPIP().toString().c_str());
 }
 
-String getDeviceID() {
-  uint64_t chipid = ESP.getEfuseMac();
-  char id[7];
-  sprintf(id, "%06X", (uint32_t)chipid);
-  return String(id);
+void setupESPNow() {
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("[MESH] ESP-NOW init failed");
+    return;
+  }
+  memcpy(broadcastPeer.peer_addr, broadcastMAC, 6);
+  broadcastPeer.channel = 0;
+  broadcastPeer.encrypt  = false;
+  esp_now_add_peer(&broadcastPeer);
+  esp_now_register_send_cb(onMeshSent);
+  Serial.println("[MESH] ESP-NOW initialized (broadcast)");
 }
 
-void initializeOBD() {
-  Serial.println("Initializing OBD connection...");
-  
-  // Reset ELM327
-  sendOBDCommand("ATZ");
-  delay(2000);
-  
-  // Echo off
-  sendOBDCommand("ATE0");
-  delay(200);
-  
-  // Line feeds off
-  sendOBDCommand("ATL0");
-  delay(200);
-  
-  // Spaces off
-  sendOBDCommand("ATS0");
-  delay(200);
-  
-  // Headers off
-  sendOBDCommand("ATH0");
-  delay(200);
-  
-  // Set protocol to auto
-  sendOBDCommand("ATSP0");
-  delay(200);
-  
-  // Test connection with RPM request
-  String response = sendOBDCommand("010C");
-  if (response.indexOf("41 0C") != -1) {
-    obdConnected = true;
-    Serial.println("OBD connected successfully");
+void onMeshSent(const uint8_t* mac, esp_now_send_status_t status) {
+  // Non-blocking callback — flash LED only
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    digitalWrite(MESH_LED, HIGH);
+    delay(5);
+    digitalWrite(MESH_LED, LOW);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  OBD INIT — NON-BLOCKING
+// ─────────────────────────────────────────────────────────────────────────────
+/*
+ * Attempts to initialize ELM327. If the chip does not respond within
+ * OBD_INIT_TIMEOUT_MS, sets obdState = OBD_ABSENT and returns immediately.
+ * The firmware continues all other functions normally.
+ */
+void initOBDNonBlocking() {
+  Serial.println("[OBD] Attempting init...");
+
+  // Clear any serial garbage
+  while (OBD_SERIAL.available()) OBD_SERIAL.read();
+
+  // Attempt reset with timeout
+  OBD_SERIAL.println("ATZ");
+  if (!waitForOBDPrompt(OBD_INIT_TIMEOUT_MS)) {
+    Serial.println("[OBD] ELM327 not detected — OBD_ABSENT");
+    obdState = OBD_ABSENT;
+    return;
+  }
+
+  sendOBDCmd("ATE0"); delay(100);
+  sendOBDCmd("ATL0"); delay(100);
+  sendOBDCmd("ATS0"); delay(100);
+  sendOBDCmd("ATH0"); delay(100);
+  sendOBDCmd("ATSP0"); delay(200);
+
+  // Probe vehicle with RPM PID
+  String resp = sendOBDCmdWithResponse("010C", OBD_PID_TIMEOUT_MS);
+  if (resp.indexOf("41") >= 0) {
+    obdState = OBD_CONNECTED_ACTIVE;
+    Serial.println("[OBD] Vehicle responding — OBD_CONNECTED_ACTIVE");
   } else {
-    obdConnected = false;
-    Serial.println("OBD connection failed");
+    obdState = OBD_CONNECTED_NO_DATA;
+    Serial.println("[OBD] ELM327 present, vehicle silent — OBD_CONNECTED_NO_DATA");
   }
 }
 
-String sendOBDCommand(String cmd) {
-  OBD_SERIAL.println(cmd);
-  
-  unsigned long timeout = millis() + 1000;
-  String response = "";
-  
-  while (millis() < timeout) {
-    if (OBD_SERIAL.available()) {
+bool waitForOBDPrompt(unsigned long timeoutMs) {
+  unsigned long deadline = millis() + timeoutMs;
+  String buf = "";
+  while (millis() < deadline) {
+    while (OBD_SERIAL.available()) {
       char c = OBD_SERIAL.read();
-      if (c == '>') {
-        break;
-      }
-      if (c != '\r' && c != '\n') {
-        response += c;
-      }
+      buf += c;
+      if (c == '>') return true;
     }
   }
-  
-  return response;
+  return false;
 }
 
+void sendOBDCmd(const char* cmd) {
+  OBD_SERIAL.println(cmd);
+  waitForOBDPrompt(500);
+}
+
+String sendOBDCmdWithResponse(const char* cmd, unsigned long timeoutMs) {
+  while (OBD_SERIAL.available()) OBD_SERIAL.read(); // flush
+  OBD_SERIAL.println(cmd);
+
+  unsigned long deadline = millis() + timeoutMs;
+  String response = "";
+  while (millis() < deadline) {
+    while (OBD_SERIAL.available()) {
+      char c = OBD_SERIAL.read();
+      if (c == '>') return response;
+      if (c != '\r' && c != '\n') response += c;
+    }
+  }
+  return response; // timed out — return whatever we have (may be empty)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  OBD POLLING
+// ─────────────────────────────────────────────────────────────────────────────
 void pollOBDData() {
-  // Poll current PID
-  PID currentPid = pids[currentPidIndex];
-  String response = sendOBDCommand(currentPid.code);
-  
-  // Parse response
-  if (response.length() > 0) {
-    parseOBDResponse(currentPid, response);
+  PIDDef& pid = pids[currentPidIndex];
+
+  String resp = sendOBDCmdWithResponse(pid.code, OBD_PID_TIMEOUT_MS);
+
+  if (resp.length() > 0) {
+    resp.replace(" ", "");
+    if (resp.indexOf("41") == 0) {
+      // Valid response
+      String data = resp.substring(4);
+      float val   = pid.converter(data);
+      *(pid.validFlag) = true;
+
+      // Update telemetry struct
+      updateTelemetryField(pid.name, val);
+
+      // If we were in NO_DATA state, upgrade to ACTIVE
+      if (obdState == OBD_CONNECTED_NO_DATA) {
+        obdState = OBD_CONNECTED_ACTIVE;
+        Serial.println("[OBD] Vehicle now responding — upgraded to OBD_CONNECTED_ACTIVE");
+      }
+    } else {
+      // Response received but not a valid PID response
+      // Mark this PID as invalid but do NOT change overall OBD state
+      *(pid.validFlag) = false;
+    }
+  } else {
+    // Timeout on this specific PID — mark invalid, do not block
+    *(pid.validFlag) = false;
+
+    // If we were ACTIVE and multiple PIDs are failing, check if we've lost contact
+    if (obdState == OBD_CONNECTED_ACTIVE) {
+      checkOBDHealthDegradation();
+    }
   }
-  
-  // Move to next PID
+
   currentPidIndex = (currentPidIndex + 1) % pidCount;
-  
-  // Send telemetry every complete cycle
-  if (currentPidIndex == 0) {
-    sendTelemetry();
+
+  // Push to WebSocket app client after each full cycle
+  if (currentPidIndex == 0 && clientConnected) {
+    sendTelemetryToApp();
   }
 }
 
-void parseOBDResponse(PID pid, String response) {
-  // Remove spaces and get data portion
-  response.replace(" ", "");
-  
-  // Check for valid response (41 = mode 01 response)
-  if (response.indexOf("41") == 0) {
-    String data = response.substring(4); // Skip "41XX" where XX is PID
-    
-    if (pid.code == "010C") {
-      telemetry.rpm = (int)pid.converter(data);
-    } else if (pid.code == "0105") {
-      telemetry.ect_c = (int)pid.converter(data);
-    } else if (pid.code == "010F") {
-      telemetry.iat_c = (int)pid.converter(data);
-    } else if (pid.code == "010B") {
-      telemetry.map_kpa = (int)pid.converter(data);
-    } else if (pid.code == "0142") {
-      telemetry.vbat = pid.converter(data);
-    } else if (pid.code == "0111") {
-      telemetry.throttle_pct = (int)pid.converter(data);
-    } else if (pid.code == "0104") {
-      telemetry.engine_load = (int)pid.converter(data);
-    } else if (pid.code == "0106") {
-      telemetry.stft = pid.converter(data);
-    } else if (pid.code == "0107") {
-      telemetry.ltft = pid.converter(data);
-    } else if (pid.code == "0114") {
-      telemetry.o2_voltage = pid.converter(data);
+void updateTelemetryField(const char* name, float val) {
+  String n = String(name);
+  if (n == "RPM")         telemetry.rpm          = (int)val;
+  else if (n == "ECT")    telemetry.ect_c        = (int)val;
+  else if (n == "IAT")    telemetry.iat_c        = (int)val;
+  else if (n == "MAP")    telemetry.map_kpa      = (int)val;
+  else if (n == "VBAT")   telemetry.vbat         = val;
+  else if (n == "THROTTLE")    telemetry.throttle_pct = (int)val;
+  else if (n == "ENGINE_LOAD") telemetry.engine_load  = (int)val;
+  else if (n == "STFT")   telemetry.stft         = val;
+  else if (n == "LTFT")   telemetry.ltft         = val;
+  else if (n == "O2_VOLTAGE") telemetry.o2_voltage = val;
+}
+
+// Track how many consecutive full cycles have zero valid PIDs
+int zeroValidCycles = 0;
+void checkOBDHealthDegradation() {
+  int validCount = 0;
+  if (telemetry.rpm_valid)  validCount++;
+  if (telemetry.ect_valid)  validCount++;
+  if (telemetry.tps_valid)  validCount++;
+  if (telemetry.vbat_valid) validCount++;
+
+  if (validCount == 0) {
+    zeroValidCycles++;
+    if (zeroValidCycles >= 5) {
+      obdState = OBD_CONNECTED_NO_DATA;
+      zeroValidCycles = 0;
+      Serial.println("[OBD] Lost vehicle response — downgraded to OBD_CONNECTED_NO_DATA");
+    }
+  } else {
+    zeroValidCycles = 0;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GPS POLLING — NMEA PARSER (GPRMC / GPGGA)
+// ─────────────────────────────────────────────────────────────────────────────
+String gpsBuffer = "";
+
+void pollGPS() {
+  while (GPS_SERIAL.available()) {
+    char c = GPS_SERIAL.read();
+    if (c == '\n') {
+      parseNMEA(gpsBuffer);
+      gpsBuffer = "";
+    } else if (c != '\r') {
+      gpsBuffer += c;
+      if (gpsBuffer.length() > 120) gpsBuffer = ""; // overflow guard
     }
   }
 }
 
-void sendTelemetry() {
-  if (!clientConnected) return;
-  
+// Minimal NMEA parser — GPRMC (position + speed + heading) and GPGGA (altitude + sats)
+void parseNMEA(const String& sentence) {
+  if (sentence.startsWith("$GPRMC") || sentence.startsWith("$GNRMC")) {
+    parseGPRMC(sentence);
+  } else if (sentence.startsWith("$GPGGA") || sentence.startsWith("$GNGGA")) {
+    parseGPGGA(sentence);
+  }
+}
+
+// GPRMC: $GPRMC,HHMMSS,A,LLLL.LL,N,YYYYY.YY,E,knots,heading,DDMMYY,...
+void parseGPRMC(const String& s) {
+  int fields[12];
+  int idx = 0;
+  fields[idx++] = 0;
+  for (int i = 0; i < (int)s.length() && idx < 12; i++) {
+    if (s[i] == ',') fields[idx++] = i + 1;
+  }
+  if (idx < 7) return;
+
+  String status = s.substring(fields[1], fields[2] - 1);
+  if (status != "A") { gpsData.valid = false; return; }
+
+  gpsData.valid     = true;
+  String utc        = s.substring(fields[0] + 7, fields[1] - 1);
+  utc.toCharArray(gpsData.utc_time, sizeof(gpsData.utc_time));
+
+  // Latitude
+  String latRaw  = s.substring(fields[2], fields[3] - 1);
+  String latDir  = s.substring(fields[3], fields[4] - 1);
+  float  latDeg  = latRaw.substring(0, 2).toFloat();
+  float  latMin  = latRaw.substring(2).toFloat();
+  gpsData.latitude = latDeg + latMin / 60.0;
+  if (latDir == "S") gpsData.latitude = -gpsData.latitude;
+
+  // Longitude
+  String lonRaw  = s.substring(fields[4], fields[5] - 1);
+  String lonDir  = s.substring(fields[5], fields[6] - 1);
+  float  lonDeg  = lonRaw.substring(0, 3).toFloat();
+  float  lonMin  = lonRaw.substring(3).toFloat();
+  gpsData.longitude = lonDeg + lonMin / 60.0;
+  if (lonDir == "W") gpsData.longitude = -gpsData.longitude;
+
+  // Speed (knots → km/h)
+  gpsData.speed_kmh  = s.substring(fields[6], fields[7] - 1).toFloat() * 1.852;
+  // Heading
+  gpsData.heading_deg = s.substring(fields[7], fields[8] - 1).toFloat();
+}
+
+// GPGGA: $GPGGA,HHMMSS,lat,N,lon,E,fix,sats,hdop,altitude,M,...
+void parseGPGGA(const String& s) {
+  int fields[15];
+  int idx = 0;
+  fields[idx++] = 0;
+  for (int i = 0; i < (int)s.length() && idx < 15; i++) {
+    if (s[i] == ',') fields[idx++] = i + 1;
+  }
+  if (idx < 10) return;
+
+  gpsData.satellites = s.substring(fields[6], fields[7] - 1).toInt();
+  gpsData.altitude_m  = s.substring(fields[8], fields[9] - 1).toFloat();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TELEMETRY FRAMES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Build the canonical telemetry JSON document
+// OBD fields are only included when their valid flag is true.
+// GPS fields are only included when gpsData.valid is true.
+// This allows the app and Hub to distinguish "sensor offline" from "sensor = 0".
+void buildTelemetryDoc(StaticJsonDocument<512>& doc) {
+  doc["type"]        = "telemetry";
+  doc["node_type"]   = NODE_TYPE;
+  doc["device_id"]   = getDeviceID();
+  doc["obd_state"]   = obdStateStr();
+  doc["session"]     = sessionActive;
+  doc["timestamp"]   = millis();
+
+  // GPS block — only if fix is valid
+  if (gpsData.valid) {
+    JsonObject gps    = doc.createNestedObject("gps");
+    gps["lat"]        = gpsData.latitude;
+    gps["lon"]        = gpsData.longitude;
+    gps["alt_m"]      = gpsData.altitude_m;
+    gps["speed_kmh"]  = gpsData.speed_kmh;
+    gps["heading"]    = gpsData.heading_deg;
+    gps["sats"]       = gpsData.satellites;
+    gps["utc"]        = gpsData.utc_time;
+  }
+
+  // OBD block — only include fields that are currently valid
+  if (obdState == OBD_CONNECTED_ACTIVE) {
+    JsonObject obd = doc.createNestedObject("obd");
+    if (telemetry.rpm_valid)  obd["rpm"]          = telemetry.rpm;
+    if (telemetry.ect_valid)  obd["ect_c"]        = telemetry.ect_c;
+    if (telemetry.iat_valid)  obd["iat_c"]        = telemetry.iat_c;
+    if (telemetry.map_valid)  obd["map_kpa"]      = telemetry.map_kpa;
+    if (telemetry.vbat_valid) obd["vbat"]         = telemetry.vbat;
+    if (telemetry.tps_valid)  obd["throttle_pct"] = telemetry.throttle_pct;
+    if (telemetry.load_valid) obd["engine_load"]  = telemetry.engine_load;
+    if (telemetry.stft_valid) obd["stft"]         = telemetry.stft;
+    if (telemetry.ltft_valid) obd["ltft"]         = telemetry.ltft;
+    if (telemetry.o2_valid)   obd["o2_voltage"]   = telemetry.o2_voltage;
+  }
+}
+
+// Send full telemetry to connected mobile app (WebSocket)
+void sendTelemetryToApp() {
   StaticJsonDocument<512> doc;
-  doc["type"] = "telemetry";
-  doc["rpm"] = telemetry.rpm;
-  doc["ect_c"] = telemetry.ect_c;
-  doc["iat_c"] = telemetry.iat_c;
-  doc["map_kpa"] = telemetry.map_kpa;
-  doc["vbat"] = telemetry.vbat;
-  doc["throttle_pct"] = telemetry.throttle_pct;
-  doc["engine_load"] = telemetry.engine_load;
-  doc["stft"] = telemetry.stft;
-  doc["ltft"] = telemetry.ltft;
-  doc["o2_voltage"] = telemetry.o2_voltage;
-  doc["timestamp"] = millis();
-  
+  buildTelemetryDoc(doc);
   String json;
   serializeJson(doc, json);
   webSocket.broadcastTXT(json);
 }
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
-  switch(type) {
+// Broadcast compact frame to mesh network via ESP-NOW
+// Kept under 250 bytes (ESP-NOW payload limit)
+void broadcastMeshTelemetry() {
+  StaticJsonDocument<250> doc;
+  doc["t"]    = "veh";
+  doc["id"]   = getDeviceID();
+  doc["ms"]   = millis();
+  doc["sess"] = sessionActive;
+
+  if (gpsData.valid) {
+    doc["lat"]  = gpsData.latitude;
+    doc["lon"]  = gpsData.longitude;
+    doc["spd"]  = (int)gpsData.speed_kmh;
+    doc["hdg"]  = (int)gpsData.heading_deg;
+  }
+
+  if (obdState == OBD_CONNECTED_ACTIVE) {
+    if (telemetry.rpm_valid)  doc["rpm"]  = telemetry.rpm;
+    if (telemetry.tps_valid)  doc["tps"]  = telemetry.throttle_pct;
+    if (telemetry.ect_valid)  doc["ect"]  = telemetry.ect_c;
+    if (telemetry.vbat_valid) doc["vbat"] = telemetry.vbat;
+  }
+
+  doc["obd"] = (uint8_t)obdState;
+
+  uint8_t buf[250];
+  size_t  len = serializeJson(doc, buf, sizeof(buf));
+  esp_now_send(broadcastMAC, buf, len);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  WEBSOCKET — APP INTERFACE
+// ─────────────────────────────────────────────────────────────────────────────
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  switch (type) {
     case WStype_DISCONNECTED:
-      Serial.printf("[%u] Disconnected!\n", num);
+      Serial.printf("[WS] Client %u disconnected\n", num);
       clientConnected = false;
       break;
-      
-    case WStype_CONNECTED:
-      {
-        IPAddress ip = webSocket.remoteIP(num);
-        Serial.printf("[%u] Connected from %d.%d.%d.%d\n", num, ip[0], ip[1], ip[2], ip[3]);
-        clientConnected = true;
-        
-        // Send connection confirmation
-        StaticJsonDocument<256> doc;
-        doc["type"] = "connected";
-        doc["version"] = FIRMWARE_VERSION;
-        doc["device_id"] = getDeviceID();
-        
-        String json;
-        serializeJson(doc, json);
-        webSocket.sendTXT(num, json);
-      }
+
+    case WStype_CONNECTED: {
+      Serial.printf("[WS] Client %u connected\n", num);
+      clientConnected = true;
+
+      StaticJsonDocument<256> doc;
+      doc["type"]        = "connected";
+      doc["version"]     = FIRMWARE_VERSION;
+      doc["node_type"]   = NODE_TYPE;
+      doc["device_id"]   = getDeviceID();
+      doc["obd_state"]   = obdStateStr();
+      doc["gps_present"] = true; // GPS hardware always present on this node
+
+      String json;
+      serializeJson(doc, json);
+      webSocket.sendTXT(num, json);
       break;
-      
-    case WStype_TEXT:
-      {
-        String message = String((char*)payload);
-        handleWebSocketMessage(num, message);
-      }
+    }
+
+    case WStype_TEXT: {
+      String msg = String((char*)payload);
+      handleAppCommand(num, msg);
       break;
+    }
   }
 }
 
-void handleWebSocketMessage(uint8_t num, String message) {
+void handleAppCommand(uint8_t num, const String& message) {
   StaticJsonDocument<256> doc;
-  DeserializationError error = deserializeJson(doc, message);
-  
-  if (error) {
-    Serial.print("JSON parse error: ");
-    Serial.println(error.c_str());
-    return;
-  }
-  
-  String command = doc["command"];
-  
-  if (command == "get_dtc") {
+  if (deserializeJson(doc, message) != DeserializationError::Ok) return;
+
+  String cmd = doc["command"] | "";
+
+  if (cmd == "get_dtc") {
     getDTCCodes(num);
-  } else if (command == "clear_dtc") {
+  } else if (cmd == "clear_dtc") {
     clearDTCCodes(num);
-  } else if (command == "set_poll_rate") {
-    int rate = doc["rate"];
-    setPollRate(rate);
-  } else if (command == "actuate") {
-    String control = doc["control"];
-    bool state = doc["state"];
-    actuateControl(control, state);
-  } else if (command == "raw_obd") {
-    String cmd = doc["cmd"];
-    sendRawOBDCommand(num, cmd);
+  } else if (cmd == "set_poll_rate") {
+    int rate = doc["rate"] | 10;
+    if (rate >= 1 && rate <= 20) {
+      OBD_POLL_INTERVAL_MS = 1000 / rate; // Not const — runtime adjustable
+    }
+  } else if (cmd == "actuate") {
+    String control = doc["control"] | "";
+    bool   state   = doc["state"]   | false;
+    actuateControl(num, control, state);
+  } else if (cmd == "raw_obd") {
+    String rawCmd = doc["cmd"] | "";
+    if (rawCmd.length() > 0) sendRawToApp(num, rawCmd);
+  } else if (cmd == "start_session") {
+    sessionActive = true;
+    replyOK(num, "session_started");
+  } else if (cmd == "stop_session") {
+    sessionActive = false;
+    replyOK(num, "session_stopped");
+  } else if (cmd == "get_status") {
+    sendStatusToApp(num);
   }
 }
 
+void replyOK(uint8_t num, const char* event) {
+  StaticJsonDocument<128> doc;
+  doc["type"]    = event;
+  doc["success"] = true;
+  String json;
+  serializeJson(doc, json);
+  webSocket.sendTXT(num, json);
+}
+
+void sendStatusToApp(uint8_t num) {
+  StaticJsonDocument<256> doc;
+  doc["type"]       = "status";
+  doc["version"]    = FIRMWARE_VERSION;
+  doc["device_id"]  = getDeviceID();
+  doc["obd_state"]  = obdStateStr();
+  doc["gps_valid"]  = gpsData.valid;
+  doc["gps_sats"]   = gpsData.satellites;
+  doc["session"]    = sessionActive;
+  doc["uptime_ms"]  = millis();
+  String json;
+  serializeJson(doc, json);
+  webSocket.sendTXT(num, json);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  OBD COMMANDS (App-facing)
+// ─────────────────────────────────────────────────────────────────────────────
 void getDTCCodes(uint8_t num) {
-  String response = sendOBDCommand("03");
-  
   StaticJsonDocument<512> doc;
   doc["type"] = "dtc_codes";
-  
   JsonArray codes = doc.createNestedArray("codes");
-  
-  // Parse DTC codes from response
-  if (response.indexOf("43") == 0) {
-    // Parse trouble codes
-    // Format: 43 XX XX XX XX XX XX
-    // Each pair of XX represents a DTC
-    response.replace(" ", "");
-    for (int i = 2; i < response.length(); i += 4) {
-      if (i + 3 < response.length()) {
-        String code = parseDTCCode(response.substring(i, i + 4));
-        if (code != "P0000") {
-          codes.add(code);
+
+  if (obdState == OBD_ABSENT) {
+    doc["error"] = "OBD not connected";
+  } else {
+    String resp = sendOBDCmdWithResponse("03", 2000);
+    resp.replace(" ", "");
+    if (resp.indexOf("43") == 0) {
+      for (int i = 2; i < (int)resp.length(); i += 4) {
+        if (i + 3 < (int)resp.length()) {
+          String code = parseDTCCode(resp.substring(i, i + 4));
+          if (code != "P0000") codes.add(code);
         }
       }
     }
   }
-  
-  telemetry.dtc_count = codes.size();
-  
+
   String json;
   serializeJson(doc, json);
   webSocket.sendTXT(num, json);
-}
-
-String parseDTCCode(String hex) {
-  if (hex.length() != 4) return "P0000";
-  
-  int byte1 = strtol(hex.substring(0, 2).c_str(), NULL, 16);
-  int byte2 = strtol(hex.substring(2, 4).c_str(), NULL, 16);
-  
-  String prefix;
-  switch ((byte1 >> 6) & 0x03) {
-    case 0: prefix = "P"; break;
-    case 1: prefix = "C"; break;
-    case 2: prefix = "B"; break;
-    case 3: prefix = "U"; break;
-  }
-  
-  char code[6];
-  sprintf(code, "%s%01X%03X", prefix.c_str(), (byte1 >> 4) & 0x03, ((byte1 & 0x0F) << 8) | byte2);
-  
-  return String(code);
 }
 
 void clearDTCCodes(uint8_t num) {
-  sendOBDCommand("04");
-  
   StaticJsonDocument<128> doc;
   doc["type"] = "dtc_cleared";
-  doc["success"] = true;
-  
+  if (obdState == OBD_ABSENT) {
+    doc["success"] = false;
+    doc["error"]   = "OBD not connected";
+  } else {
+    sendOBDCmdWithResponse("04", 2000);
+    doc["success"] = true;
+  }
   String json;
   serializeJson(doc, json);
   webSocket.sendTXT(num, json);
 }
 
-void setPollRate(int rate) {
-  if (rate >= 1 && rate <= 20) {
-    pollInterval = 1000 / rate;
-    Serial.printf("Poll rate set to %d Hz\n", rate);
+void actuateControl(uint8_t num, const String& control, bool state) {
+  StaticJsonDocument<128> doc;
+  doc["type"]    = "actuate_result";
+  doc["control"] = control;
+  doc["state"]   = state;
+
+  if (obdState == OBD_ABSENT) {
+    doc["success"] = false;
+    doc["error"]   = "OBD not connected";
+  } else {
+    String obdCmd = "";
+    if (control == "fan_main")  obdCmd = state ? "0801" : "0800";
+    else if (control == "pump_aux") obdCmd = state ? "0803" : "0802";
+
+    if (obdCmd.length() > 0) {
+      sendOBDCmdWithResponse(obdCmd.c_str(), 1000);
+      doc["success"] = true;
+    } else {
+      doc["success"] = false;
+      doc["error"]   = "Unknown control";
+    }
   }
+
+  String json;
+  serializeJson(doc, json);
+  webSocket.sendTXT(num, json);
 }
 
-void actuateControl(String control, bool state) {
-  // Mode 08 - Request control of on-board system
-  // This is vehicle-specific and should be implemented based on your ECU
-  
-  if (control == "fan_main") {
-    // Example: Control main cooling fan
-    String cmd = state ? "0801" : "0800";
-    sendOBDCommand(cmd);
-  } else if (control == "pump_aux") {
-    // Example: Control auxiliary pump
-    String cmd = state ? "0803" : "0802";
-    sendOBDCommand(cmd);
-  }
-  // Add more controls as needed
-}
-
-void sendRawOBDCommand(uint8_t num, String cmd) {
-  String response = sendOBDCommand(cmd);
-  
+void sendRawToApp(uint8_t num, const String& cmd) {
+  String resp = sendOBDCmdWithResponse(cmd.c_str(), 2000);
   StaticJsonDocument<256> doc;
-  doc["type"] = "raw_response";
-  doc["command"] = cmd;
-  doc["response"] = response;
-  
+  doc["type"]     = "raw_response";
+  doc["command"]  = cmd;
+  doc["response"] = (obdState == OBD_ABSENT) ? "ERROR: OBD ABSENT" : resp;
   String json;
   serializeJson(doc, json);
   webSocket.sendTXT(num, json);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+String getDeviceID() {
+  char id[7];
+  sprintf(id, "%06X", (uint32_t)ESP.getEfuseMac());
+  return String(id);
+}
+
+const char* obdStateStr() {
+  switch (obdState) {
+    case OBD_ABSENT:             return "absent";
+    case OBD_CONNECTED_NO_DATA:  return "no_data";
+    case OBD_CONNECTED_ACTIVE:   return "active";
+  }
+  return "unknown";
+}
+
+String parseDTCCode(const String& hex) {
+  if (hex.length() != 4) return "P0000";
+  int b1 = strtol(hex.substring(0, 2).c_str(), NULL, 16);
+  int b2 = strtol(hex.substring(2, 4).c_str(), NULL, 16);
+  String prefix;
+  switch ((b1 >> 6) & 0x03) {
+    case 0: prefix = "P"; break;
+    case 1: prefix = "C"; break;
+    case 2: prefix = "B"; break;
+    default: prefix = "U"; break;
+  }
+  char code[6];
+  sprintf(code, "%s%01X%03X", prefix.c_str(), (b1 >> 4) & 0x03, ((b1 & 0x0F) << 8) | b2);
+  return String(code);
 }
 
 void updateStatusLED() {
   static unsigned long lastBlink = 0;
-  static bool ledState = false;
-  
-  if (clientConnected && obdConnected) {
-    // Solid on when fully connected
+  static bool          ledState  = false;
+
+  if (clientConnected && obdState == OBD_CONNECTED_ACTIVE) {
     digitalWrite(STATUS_LED, HIGH);
-  } else if (obdConnected) {
-    // Slow blink when OBD connected but no client
-    if (millis() - lastBlink > 1000) {
-      ledState = !ledState;
-      digitalWrite(STATUS_LED, ledState);
-      lastBlink = millis();
-    }
+  } else if (clientConnected || obdState == OBD_CONNECTED_NO_DATA) {
+    if (millis() - lastBlink > 500) { ledState = !ledState; digitalWrite(STATUS_LED, ledState); lastBlink = millis(); }
   } else {
-    // Fast blink when not connected to OBD
-    if (millis() - lastBlink > 200) {
-      ledState = !ledState;
-      digitalWrite(STATUS_LED, ledState);
-      lastBlink = millis();
-    }
+    if (millis() - lastBlink > 150) { ledState = !ledState; digitalWrite(STATUS_LED, ledState); lastBlink = millis(); }
   }
 }
 
 void handleSerialCommand() {
   String cmd = Serial.readStringUntil('\n');
   cmd.trim();
-  
-  if (cmd == "status") {
-    printStatus();
-  } else if (cmd == "reset") {
-    ESP.restart();
-  } else if (cmd.startsWith("obd ")) {
-    String obdCmd = cmd.substring(4);
-    String response = sendOBDCommand(obdCmd);
-    Serial.print("OBD Response: ");
-    Serial.println(response);
+  if      (cmd == "status")   { printStatus(); }
+  else if (cmd == "reset")    { ESP.restart(); }
+  else if (cmd == "obdinit")  { initOBDNonBlocking(); }
+  else if (cmd.startsWith("obd ")) {
+    String resp = sendOBDCmdWithResponse(cmd.substring(4).c_str(), 2000);
+    Serial.printf("[OBD] > %s\n", resp.c_str());
   }
 }
 
 void printStatus() {
-  Serial.println("=== Reycin OBD Status ===");
-  Serial.print("Firmware Version: ");
-  Serial.println(FIRMWARE_VERSION);
-  Serial.print("Device ID: ");
-  Serial.println(getDeviceID());
-  Serial.print("OBD Connected: ");
-  Serial.println(obdConnected ? "Yes" : "No");
-  Serial.print("Client Connected: ");
-  Serial.println(clientConnected ? "Yes" : "No");
-  Serial.print("Poll Rate: ");
-  Serial.print(1000 / pollInterval);
-  Serial.println(" Hz");
-  Serial.print("WiFi SSID: ");
-  Serial.println(String(DEVICE_NAME) + getDeviceID());
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.softAPIP());
-  Serial.println("========================");
+  Serial.println("=== Reycin Vehicle Node Status ===");
+  Serial.printf("Firmware:    v%s\n", FIRMWARE_VERSION);
+  Serial.printf("Device ID:   %s\n", getDeviceID().c_str());
+  Serial.printf("OBD State:   %s\n", obdStateStr());
+  Serial.printf("GPS Valid:   %s  Sats: %d\n", gpsData.valid ? "YES" : "NO", gpsData.satellites);
+  Serial.printf("Client:      %s\n", clientConnected ? "Connected" : "None");
+  Serial.printf("Session:     %s\n", sessionActive ? "Active" : "Idle");
+  Serial.printf("Uptime:      %lu ms\n", millis());
+  Serial.println("===================================");
 }
 ```
 
-## Installation Instructions
+---
 
-1. **Install Required Libraries**
-   - Open Arduino IDE
-   - Go to Tools > Manage Libraries
-   - Install the following:
-     - `WebSockets` by Markus Sattler
-     - `ArduinoJson` by Benoit Blanchon
+## OBD State Reference
 
-2. **Board Configuration**
-   - Go to Tools > Board > ESP32 Arduino > ESP32 Dev Module
-   - Set the following parameters:
-     - Upload Speed: 921600
-     - CPU Frequency: 240MHz (WiFi/BT)
-     - Flash Frequency: 80MHz
-     - Flash Mode: QIO
-     - Flash Size: 4MB (32Mb)
-     - Partition Scheme: Default 4MB with spiffs
+| State | `obd_state` field | OBD fields in frame | Typical cause |
+|---|---|---|---|
+| `OBD_ABSENT` | `"absent"` | Not present | No ELM327 wired, dev bench testing |
+| `OBD_CONNECTED_NO_DATA` | `"no_data"` | All `null` / omitted | ELM327 connected, ignition off, or dev vehicle with no ECU |
+| `OBD_CONNECTED_ACTIVE` | `"active"` | Present per valid flag | Normal race operation |
 
-3. **Upload the Firmware**
-   - Connect ESP32 to computer via USB
-   - Select the correct COM port in Tools > Port
-   - Click Upload button
+**The mobile app and Hub must accept all three states without error.**  
+The digital dash should display sensors as "offline" (gray) when their valid flag is absent from the frame, rather than showing zero or crashing.
 
-## Mobile App Integration
+---
 
-The mobile app connects to the ESP32 via WebSocket using the following format:
+## Telemetry Frame Reference
 
-### Connection
-```javascript
-// In the OBDProvider
-const ws = new WebSocket(`ws://192.168.4.1:81`);
-```
-
-### Message Format
-
-**Request telemetry:**
-```json
-{
-  "command": "get_telemetry"
-}
-```
-
-**Response:**
+### Full Frame (GPS + OBD Active)
 ```json
 {
   "type": "telemetry",
-  "rpm": 3200,
-  "ect_c": 85,
-  "iat_c": 28,
-  "map_kpa": 98,
+  "node_type": "vehicle",
+  "device_id": "A3F921",
+  "obd_state": "active",
+  "session": true,
+  "timestamp": 123456789,
+  "gps": {
+    "lat": 36.1597,
+    "lon": -96.5916,
+    "alt_m": 284.5,
+    "speed_kmh": 112.3,
+    "heading": 247.0,
+    "sats": 9,
+    "utc": "143022.00"
+  },
+  "obd": {
+    "rpm": 6400,
+    "ect_c": 92,
+    "iat_c": 38,
+    "map_kpa": 97,
+    "vbat": 13.8,
+    "throttle_pct": 87,
+    "engine_load": 91,
+    "stft": -1.2,
+    "ltft": 2.3,
+    "o2_voltage": 0.72
+  }
+}
+```
+
+### GPS-Only Frame (OBD Absent — Dev Mode)
+```json
+{
+  "type": "telemetry",
+  "node_type": "vehicle",
+  "device_id": "A3F921",
+  "obd_state": "absent",
+  "session": false,
+  "timestamp": 123456789,
+  "gps": {
+    "lat": 36.1597,
+    "lon": -96.5916,
+    "alt_m": 284.5,
+    "speed_kmh": 0.0,
+    "heading": 0.0,
+    "sats": 6,
+    "utc": "143022.00"
+  }
+}
+```
+
+### OBD Connected, No ECU Response (Dev / Ignition Off)
+```json
+{
+  "type": "telemetry",
+  "node_type": "vehicle",
+  "device_id": "A3F921",
+  "obd_state": "no_data",
+  "session": false,
+  "timestamp": 123456789,
+  "gps": { "lat": 36.1597, "lon": -96.5916, ... }
+}
+```
+
+---
+
+## ESP-NOW Mesh Compact Frame (< 250 bytes)
+
+```json
+{
+  "t":    "veh",
+  "id":   "A3F921",
+  "ms":   123456789,
+  "sess": true,
+  "lat":  36.1597,
+  "lon":  -96.5916,
+  "spd":  112,
+  "hdg":  247,
+  "rpm":  6400,
+  "tps":  87,
+  "ect":  92,
   "vbat": 13.8,
-  "throttle_pct": 45,
-  "engine_load": 62,
-  "stft": -2.3,
-  "ltft": 1.5,
-  "o2_voltage": 0.45,
-  "timestamp": 123456789
+  "obd":  2
 }
 ```
 
-**Get DTC codes:**
-```json
-{
-  "command": "get_dtc"
-}
-```
+`obd` field: `0` = absent, `1` = no_data, `2` = active
 
-**Clear DTC codes:**
-```json
-{
-  "command": "clear_dtc"
-}
-```
+---
 
-**Set polling rate:**
-```json
-{
-  "command": "set_poll_rate",
-  "rate": 10
-}
-```
+## App Commands (WebSocket)
 
-**Actuate control:**
-```json
-{
-  "command": "actuate",
-  "control": "fan_main",
-  "state": true
-}
-```
+| Command | Payload | Description |
+|---|---|---|
+| `get_dtc` | — | Read stored fault codes |
+| `clear_dtc` | — | Clear DTCs (double-confirm in app required) |
+| `set_poll_rate` | `{ "rate": 10 }` | Set OBD polling rate 1–20 Hz |
+| `actuate` | `{ "control": "fan_main", "state": true }` | Actuator override |
+| `raw_obd` | `{ "cmd": "010C" }` | Direct ELM327 command |
+| `start_session` | — | Mark session active (broadcast to mesh) |
+| `stop_session` | — | Mark session inactive |
+| `get_status` | — | Full node status response |
 
-## LED Status Indicators
+---
 
-- **Solid ON**: Fully connected (OBD + Mobile App)
-- **Slow Blink (1Hz)**: OBD connected, waiting for app
-- **Fast Blink (5Hz)**: No OBD connection
-- **OFF**: No power or initialization
+## LED Status
 
-## Troubleshooting
+| Pattern | Meaning |
+|---|---|
+| Solid ON (STATUS_LED) | App connected + OBD active |
+| Slow blink 500ms (STATUS_LED) | App connected OR OBD no_data |
+| Fast blink 150ms (STATUS_LED) | No app, no OBD |
+| Brief flash (MESH_LED) | ESP-NOW frame sent successfully |
 
-1. **OBD Not Connecting**
-   - Verify ELM327 wiring
-   - Check vehicle ignition is ON
-   - Try different baud rates (9600, 38400, 115200)
+---
 
-2. **App Can't Connect**
-   - Ensure connected to ESP32 WiFi network
-   - Check WebSocket port (81) is correct
-   - Verify IP address (192.168.4.1)
+## Installation
 
-3. **No Data Received**
-   - Check vehicle compatibility
-   - Verify PIDs are supported by vehicle
-   - Monitor serial output for errors
+1. Install libraries: `WebSockets` (Markus Sattler), `ArduinoJson` (Benoit Blanchon), `TinyGPS++` (optional, can use built-in NMEA parser above)
+2. Board: ESP32 Dev Module, 240MHz, QIO, 4MB default partition
+3. GPS baud: 9600 (most NEO-6M default) — change `GPS_BAUD` if different
+4. OBD baud: 38400 — try 9600 or 115200 if ELM327 variant differs
 
-## Supported OBD Protocols
+---
 
-- ISO 15765-4 (CAN)
-- ISO 14230-4 (KWP2000)
-- ISO 9141-2
-- J1850 VPW
-- J1850 PWM
-
-## Security Notes
-
-- Change default AP password in production
-- Implement authentication for WebSocket connections
-- Use encrypted connections (WSS) for production
-- Validate all incoming commands
-- Implement rate limiting for commands
-
-## License
-
-This firmware is proprietary to Reycin USA and should only be used with authorized Reycin OBD devices and applications.
+*Vehicle Node Firmware is part of the Reycin Race Network. See MARSHAL_NODE_FIRMWARE.md and HUB_NODE_FIRMWARE.md for the full mesh architecture.*
