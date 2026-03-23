@@ -33,6 +33,7 @@ import {
   Check,
 } from "lucide-react-native";
 import TuningConsole from "@/app/(tabs)/race/tuning";
+import { useOBD } from "@/providers/OBDProvider";
 
 type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit";
 
@@ -991,14 +992,16 @@ function BarGauge({
   label,
   unit,
   accentColor,
+  offline,
 }: {
   value: number;
   max: number;
   label: string;
   unit: string;
   accentColor: string;
+  offline?: boolean;
 }) {
-  const pct = Math.min(value / max, 1);
+  const pct = offline ? 0 : Math.min(value / max, 1);
   const barAnim = useRef(new Animated.Value(pct)).current;
 
   useEffect(() => {
@@ -1014,20 +1017,26 @@ function BarGauge({
     outputRange: ["0%", "100%"],
   });
 
+  const displayColor = offline ? "#2a2a2a" : accentColor;
+
   return (
     <View style={gaugeStyles.container}>
       <View style={gaugeStyles.labelRow}>
-        <Text style={gaugeStyles.label}>{label}</Text>
-        <Text style={[gaugeStyles.value, { color: accentColor }]}>
-          {Math.round(value)}
-          <Text style={gaugeStyles.unit}> {unit}</Text>
-        </Text>
+        <Text style={[gaugeStyles.label, offline && gaugeStyles.labelOffline]}>{label}</Text>
+        {offline ? (
+          <Text style={gaugeStyles.offlineText}>OFFLINE</Text>
+        ) : (
+          <Text style={[gaugeStyles.value, { color: accentColor }]}>
+            {Math.round(value)}
+            <Text style={gaugeStyles.unit}> {unit}</Text>
+          </Text>
+        )}
       </View>
       <View style={gaugeStyles.track}>
         <Animated.View
           style={[
             gaugeStyles.fill,
-            { width: barWidth, backgroundColor: accentColor },
+            { width: barWidth, backgroundColor: displayColor },
           ]}
         />
       </View>
@@ -1071,6 +1080,15 @@ const gaugeStyles = StyleSheet.create({
   fill: {
     height: "100%",
     borderRadius: 3,
+  },
+  labelOffline: {
+    color: "#2a2a2a",
+  },
+  offlineText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#2a2a2a",
+    letterSpacing: 1,
   },
 });
 
@@ -1149,19 +1167,29 @@ const shiftStyles = StyleSheet.create({
   },
 });
 
+function estimateGear(rpm: number): number {
+  if (rpm < 2500) return 1;
+  if (rpm < 4000) return 2;
+  if (rpm < 5500) return 3;
+  if (rpm < 7000) return 4;
+  if (rpm < 8500) return 5;
+  return 6;
+}
+
 function DigitalDashScreen() {
+  const { telemetry, connectionStatus, isConnected, firmwareObdState, gpsSource } = useOBD();
   const [isDemo, setIsDemo] = useState(false);
   const demoRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef(0);
 
-  const [rpm, setRpm] = useState(0);
-  const [speed, setSpeed] = useState(0);
-  const [gear, setGear] = useState<number | string>(1);
-  const [throttle, setThrottle] = useState(0);
-  const [brake, setBrake] = useState(0);
-  const [oilTemp, setOilTemp] = useState(90);
-  const [waterTemp, setWaterTemp] = useState(85);
-  const [voltage, setVoltage] = useState(13.8);
+  const [demoRpm, setDemoRpm] = useState(0);
+  const [demoSpeed, setDemoSpeed] = useState(0);
+  const [demoGear, setDemoGear] = useState<number>(1);
+  const [demoThrottle, setDemoThrottle] = useState(0);
+  const [demoBrake, setDemoBrake] = useState(0);
+  const [demoCoolant, setDemoCoolant] = useState(90);
+  const [demoIntake, setDemoIntake] = useState(38);
+  const [demoVoltage, setDemoVoltage] = useState(13.8);
   const [lapTime, setLapTime] = useState(0);
   const [lastLap, setLastLap] = useState<number | null>(null);
 
@@ -1170,47 +1198,29 @@ function DigitalDashScreen() {
 
   const MAX_RPM = 9800;
 
+  // ── Demo mode simulation ───────────────────────────────────────────────────
   useEffect(() => {
     if (isDemo) {
       lapStartRef.current = Date.now();
       lapTimerRef.current = setInterval(() => {
         setLapTime(Date.now() - lapStartRef.current);
       }, 50);
-
       demoRef.current = setInterval(() => {
         tickRef.current += 1;
         const t = tickRef.current;
         const cycle = (t % 300) / 300;
-
-        const rpmVal =
-          1500 +
-          Math.abs(Math.sin(cycle * Math.PI * 2)) * 7200 +
-          Math.random() * 300;
+        const rpmVal = 1500 + Math.abs(Math.sin(cycle * Math.PI * 2)) * 7200 + Math.random() * 300;
         const spd = Math.round((rpmVal / MAX_RPM) * 118 + Math.random() * 4);
-        const g =
-          rpmVal < 2500
-            ? 1
-            : rpmVal < 4000
-            ? 2
-            : rpmVal < 5500
-            ? 3
-            : rpmVal < 7000
-            ? 4
-            : rpmVal < 8500
-            ? 5
-            : 6;
         const thr = Math.round(Math.max(0, Math.sin(cycle * Math.PI * 2) * 100));
         const brk = thr < 20 ? Math.round(Math.random() * 60) : 0;
-
-        setRpm(rpmVal);
-        setSpeed(spd);
-        setGear(g);
-        setThrottle(thr);
-        setBrake(brk);
-        setOilTemp(90 + Math.sin(t * 0.01) * 15 + Math.random() * 2);
-        setWaterTemp(85 + Math.sin(t * 0.008) * 12 + Math.random() * 2);
-        setVoltage(13.2 + Math.random() * 0.8);
-
+        setDemoRpm(rpmVal);
+        setDemoSpeed(spd);
+        setDemoGear(estimateGear(rpmVal));
+        setDemoThrottle(thr);
+        setDemoBrake(brk);
+        setDemoCoolant(90 + Math.sin(t * 0.01) * 15 + Math.random() * 2);
+        setDemoIntake(38 + Math.sin(t * 0.008) * 6 + Math.random() * 2);
+        setDemoVoltage(13.2 + Math.random() * 0.8);
         if (t % 240 === 0 && t > 0) {
           const lt = Date.now() - lapStartRef.current;
           setLastLap(lt);
@@ -1222,16 +1232,10 @@ function DigitalDashScreen() {
       if (demoRef.current) clearInterval(demoRef.current);
       if (lapTimerRef.current) clearInterval(lapTimerRef.current);
       tickRef.current = 0;
-      setRpm(0);
-      setSpeed(0);
-      setGear(1);
-      setThrottle(0);
-      setBrake(0);
-      setOilTemp(90);
-      setWaterTemp(85);
-      setVoltage(13.8);
-      setLapTime(0);
-      setLastLap(null);
+      setDemoRpm(0); setDemoSpeed(0); setDemoGear(1);
+      setDemoThrottle(0); setDemoBrake(0);
+      setDemoCoolant(90); setDemoIntake(38); setDemoVoltage(13.8);
+      setLapTime(0); setLastLap(null);
     }
     return () => {
       if (demoRef.current) clearInterval(demoRef.current);
@@ -1239,65 +1243,146 @@ function DigitalDashScreen() {
     };
   }, [isDemo]);
 
-  const rpmPct = rpm / MAX_RPM;
-  const rpmColor =
-    rpmPct < 0.65 ? "#FFFFFF" : rpmPct < 0.82 ? "#FFD600" : "#FF1801";
+  // ── Live telemetry lap timer ───────────────────────────────────────────────
+  const liveLapStartRef = useRef(0);
+  const [liveLapTime, setLiveLapTime] = useState(0);
+  const [liveLastLap, setLiveLastLap] = useState<number | null>(null);
+  const liveLapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (isConnected && !isDemo) {
+      if (!liveLapStartRef.current) liveLapStartRef.current = Date.now();
+      liveLapIntervalRef.current = setInterval(() => {
+        setLiveLapTime(Date.now() - liveLapStartRef.current);
+      }, 50);
+    } else {
+      if (liveLapIntervalRef.current) clearInterval(liveLapIntervalRef.current);
+      if (!isConnected) {
+        liveLapStartRef.current = 0;
+        setLiveLapTime(0);
+        setLiveLastLap(null);
+      }
+    }
+    return () => { if (liveLapIntervalRef.current) clearInterval(liveLapIntervalRef.current); };
+  }, [isConnected, isDemo]);
+
+  // ── Resolved display values ────────────────────────────────────────────────
+  const isLive = isConnected && !isDemo;
+
+  const rpm        = isDemo ? demoRpm        : (telemetry?.rpm ?? undefined);
+  const speed      = isDemo ? demoSpeed       : (telemetry?.gps?.speed_kmh ?? telemetry?.speed_kmh ?? undefined);
+  const throttle   = isDemo ? demoThrottle   : (telemetry?.throttle_pct ?? undefined);
+  const brake      = isDemo ? demoBrake      : undefined;
+  const coolant    = isDemo ? demoCoolant    : (telemetry?.ect_c ?? undefined);
+  const intake     = isDemo ? demoIntake     : (telemetry?.iat_c ?? undefined);
+  const voltage    = isDemo ? demoVoltage    : (telemetry?.vbat ?? undefined);
+  const gear       = isDemo ? demoGear       : (rpm !== undefined ? estimateGear(rpm) : undefined);
+  const displayLap = isDemo ? lapTime        : liveLapTime;
+  const displayLastLap = isDemo ? lastLap   : liveLastLap;
+
+  const rpmSafe  = rpm ?? 0;
+  const rpmPct   = rpmSafe / MAX_RPM;
+  const rpmColor = rpmPct < 0.65 ? "#FFFFFF" : rpmPct < 0.82 ? "#FFD600" : "#FF1801";
+
+  // ── Connection badge logic ─────────────────────────────────────────────────
+  const connColor = isDemo
+    ? "#FFD600"
+    : isConnected
+    ? "#34C759"
+    : connectionStatus === "connecting"
+    ? "#FF9500"
+    : "#444";
+
+  const connLabel = isDemo
+    ? "DEMO"
+    : isConnected
+    ? "LIVE"
+    : connectionStatus === "connecting"
+    ? "CONNECTING"
+    : "NO SIGNAL";
+
+  const ConnIcon = isDemo
+    ? Zap
+    : isConnected
+    ? Zap
+    : WifiOff;
+
+  // OBD state display
+  const obdStateLabel =
+    firmwareObdState === "active" ? "ACTIVE"
+    : firmwareObdState === "no_data" ? "NO ECU"
+    : firmwareObdState === "absent" ? "ABSENT"
+    : isConnected ? "—"
+    : "—";
+  const obdStateColor =
+    firmwareObdState === "active" ? "#34C759"
+    : firmwareObdState === "no_data" ? "#FFD600"
+    : firmwareObdState === "absent" ? "#FF1801"
+    : "#2a2a2a";
+
+  // GPS state display
+  const gpsLabel =
+    gpsSource === "esp32" ? "ESP32"
+    : gpsSource === "phone" ? "PHONE"
+    : "—";
+  const gpsColor =
+    gpsSource === "esp32" ? "#34C759"
+    : gpsSource === "phone" ? "#FF9500"
+    : "#2a2a2a";
 
   return (
     <View style={dashStyles.root}>
       <View style={dashStyles.topBar}>
         <View style={dashStyles.connBadge}>
-          {isDemo ? (
-            <Zap size={11} color="#FFD600" strokeWidth={2} />
-          ) : (
-            <WifiOff size={11} color="#444" strokeWidth={2} />
-          )}
-          <Text
-            style={[
-              dashStyles.connText,
-              { color: isDemo ? "#FFD600" : "#444" },
-            ]}
-          >
-            {isDemo ? "DEMO" : "NO SIGNAL"}
+          <ConnIcon size={11} color={connColor} strokeWidth={2} />
+          <Text style={[dashStyles.connText, { color: connColor }]}>
+            {connLabel}
           </Text>
+          {isLive && telemetry && (
+            <View style={dashStyles.liveIndicator} />
+          )}
         </View>
         <TouchableOpacity
           style={[dashStyles.demoBtn, isDemo && dashStyles.demoBtnActive]}
           onPress={() => setIsDemo((v) => !v)}
           activeOpacity={0.75}
+          testID="dash-demo-btn"
         >
-          <Text
-            style={[
-              dashStyles.demoBtnText,
-              isDemo && dashStyles.demoBtnTextActive,
-            ]}
-          >
+          <Text style={[dashStyles.demoBtnText, isDemo && dashStyles.demoBtnTextActive]}>
             {isDemo ? "STOP DEMO" : "RUN DEMO"}
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ShiftLights rpmPct={rpmPct} />
+      <ShiftLights rpmPct={isLive && rpm === undefined ? 0 : rpmPct} />
 
       <View style={dashStyles.centerSection}>
         <View style={dashStyles.speedBlock}>
           <Text style={dashStyles.speedLabel}>KM/H</Text>
-          <Text style={dashStyles.speedValue}>
-            {String(speed).padStart(3, " ")}
-          </Text>
+          {isLive && speed === undefined ? (
+            <Text style={[dashStyles.speedValue, dashStyles.offlineVal]}>—</Text>
+          ) : (
+            <Text style={dashStyles.speedValue}>
+              {String(Math.round(speed ?? 0)).padStart(3, " ")}
+            </Text>
+          )}
         </View>
 
         <View style={dashStyles.gearBlock}>
           <Text style={dashStyles.gearLabel}>GEAR</Text>
-          <Text style={[dashStyles.gearValue, { color: rpmColor }]}>{gear}</Text>
+          {isLive && gear === undefined ? (
+            <Text style={[dashStyles.gearValue, { color: "#2a2a2a" }]}>—</Text>
+          ) : (
+            <Text style={[dashStyles.gearValue, { color: rpmColor }]}>{gear ?? 1}</Text>
+          )}
         </View>
 
         <View style={dashStyles.lapBlock}>
           <Text style={dashStyles.lapLabel}>LAP</Text>
-          <Text style={dashStyles.lapValue}>{formatTimeColon(lapTime)}</Text>
-          {lastLap !== null && (
+          <Text style={dashStyles.lapValue}>{formatTimeColon(displayLap)}</Text>
+          {displayLastLap !== null && (
             <Text style={dashStyles.lastLapValue}>
-              PREV {formatTime(lastLap)}
+              PREV {formatTime(displayLastLap)}
             </Text>
           )}
         </View>
@@ -1306,9 +1391,13 @@ function DigitalDashScreen() {
       <View style={dashStyles.rpmSection}>
         <View style={dashStyles.rpmLabelRow}>
           <Text style={dashStyles.rpmLabel}>RPM</Text>
-          <Text style={[dashStyles.rpmValue, { color: rpmColor }]}>
-            {Math.round(rpm).toLocaleString()}
-          </Text>
+          {isLive && rpm === undefined ? (
+            <Text style={[dashStyles.rpmValue, { color: "#2a2a2a" }]}>OFFLINE</Text>
+          ) : (
+            <Text style={[dashStyles.rpmValue, { color: rpmColor }]}>
+              {Math.round(rpmSafe).toLocaleString()}
+            </Text>
+          )}
           <Text style={dashStyles.rpmMax}>/ {MAX_RPM.toLocaleString()}</Text>
         </View>
         <View style={dashStyles.rpmTrack}>
@@ -1317,7 +1406,7 @@ function DigitalDashScreen() {
               dashStyles.rpmFill,
               {
                 width: `${Math.min(rpmPct * 100, 100)}%`,
-                backgroundColor: rpmColor,
+                backgroundColor: isLive && rpm === undefined ? "#1a1a1a" : rpmColor,
               },
             ]}
           />
@@ -1337,49 +1426,61 @@ function DigitalDashScreen() {
 
       <View style={dashStyles.gaugeGrid}>
         <BarGauge
-          value={throttle}
+          value={throttle ?? 0}
           max={100}
           label="THROTTLE"
           unit="%"
           accentColor="#00FF41"
+          offline={isLive && throttle === undefined}
         />
         <BarGauge
-          value={brake}
+          value={brake ?? 0}
           max={100}
           label="BRAKE"
           unit="%"
           accentColor="#FF1801"
+          offline={isLive || (!isDemo && brake === undefined)}
         />
         <BarGauge
-          value={oilTemp}
-          max={160}
-          label="OIL TEMP"
-          unit="°C"
-          accentColor="#FF9500"
-        />
-        <BarGauge
-          value={waterTemp}
+          value={coolant ?? 0}
           max={130}
-          label="WATER TEMP"
+          label="COOLANT"
           unit="°C"
           accentColor="#00B4FF"
+          offline={isLive && coolant === undefined}
+        />
+        <BarGauge
+          value={intake ?? 0}
+          max={80}
+          label="INTAKE AIR"
+          unit="°C"
+          accentColor="#FF9500"
+          offline={isLive && intake === undefined}
         />
       </View>
 
       <View style={dashStyles.statusRow}>
         <View style={dashStyles.statusCell}>
           <Text style={dashStyles.statusLabel}>VOLTAGE</Text>
-          <Text style={dashStyles.statusValue}>{voltage.toFixed(1)}V</Text>
+          {voltage !== undefined ? (
+            <Text style={dashStyles.statusValue}>{voltage.toFixed(1)}V</Text>
+          ) : (
+            <Text style={[dashStyles.statusValue, { color: "#2a2a2a" }]}>—</Text>
+          )}
         </View>
         <View style={dashStyles.statusDivider} />
         <View style={dashStyles.statusCell}>
-          <Text style={dashStyles.statusLabel}>OBD PORT</Text>
-          <Text style={[dashStyles.statusValue, { color: "#444" }]}>—</Text>
+          <Text style={dashStyles.statusLabel}>OBD</Text>
+          <Text style={[dashStyles.statusValue, { color: isDemo ? "#FFD600" : obdStateColor }]}>
+            {isDemo ? "SIM" : obdStateLabel}
+          </Text>
         </View>
         <View style={dashStyles.statusDivider} />
         <View style={dashStyles.statusCell}>
           <Text style={dashStyles.statusLabel}>GPS</Text>
-          <Text style={[dashStyles.statusValue, { color: "#444" }]}>—</Text>
+          <Text style={[dashStyles.statusValue, { color: isDemo ? "#FFD600" : gpsColor }]}>
+            {isDemo ? "SIM" : gpsLabel}
+          </Text>
         </View>
       </View>
     </View>
@@ -1586,6 +1687,17 @@ const dashStyles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFF",
     fontVariant: ["tabular-nums"] as const,
+  },
+  liveIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#34C759",
+    marginLeft: 2,
+  },
+  offlineVal: {
+    color: "#2a2a2a",
+    fontSize: 72,
   },
 });
 

@@ -553,7 +553,7 @@ void buildTelemetryDoc(StaticJsonDocument<512>& doc) {
   doc["session"]     = sessionActive;
   doc["timestamp"]   = millis();
 
-  // GPS block — only if fix is valid
+  // GPS block — hardware GPS first, phone GPS fallback if hardware absent/invalid
   if (gpsData.valid) {
     JsonObject gps    = doc.createNestedObject("gps");
     gps["lat"]        = gpsData.latitude;
@@ -563,6 +563,16 @@ void buildTelemetryDoc(StaticJsonDocument<512>& doc) {
     gps["heading"]    = gpsData.heading_deg;
     gps["sats"]       = gpsData.satellites;
     gps["utc"]        = gpsData.utc_time;
+    gps["src"]        = "esp32";
+  } else if (phoneGpsValid()) {
+    JsonObject gps    = doc.createNestedObject("gps");
+    gps["lat"]        = phoneGps.latitude;
+    gps["lon"]        = phoneGps.longitude;
+    gps["alt_m"]      = phoneGps.altitude_m;
+    gps["speed_kmh"]  = phoneGps.speed_kmh;
+    gps["heading"]    = phoneGps.heading_deg;
+    gps["sats"]       = 0; // phone GPS, satellite count not available
+    gps["src"]        = "phone";
   }
 
   // OBD block — only include fields that are currently valid
@@ -599,11 +609,13 @@ void broadcastMeshTelemetry() {
   doc["ms"]   = millis();
   doc["sess"] = sessionActive;
 
-  if (gpsData.valid) {
-    doc["lat"]  = gpsData.latitude;
-    doc["lon"]  = gpsData.longitude;
-    doc["spd"]  = (int)gpsData.speed_kmh;
-    doc["hdg"]  = (int)gpsData.heading_deg;
+  // Use resolved GPS (hardware preferred, phone fallback)
+  if (resolvedGpsValid()) {
+    doc["lat"]  = resolvedLat();
+    doc["lon"]  = resolvedLon();
+    doc["spd"]  = (int)resolvedSpeed();
+    doc["hdg"]  = (int)resolvedHeading();
+    doc["gsrc"] = gpsData.valid ? 0 : 1; // 0=ESP32, 1=phone
   }
 
   if (obdState == OBD_CONNECTED_ACTIVE) {
@@ -656,6 +668,42 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
   }
 }
 
+// ─── Phone GPS Fallback ───────────────────────────────────────────────────────
+// When the ESP32's onboard GPS module is absent or has no fix, the connected
+// mobile app sends its own device GPS via the "gps_update" command.
+// This data is stored and used exactly like hardware GPS in telemetry frames.
+// The vehicle node connects to ONLY ONE phone (first WebSocket client).
+// That phone is responsible for sending gps_update when hardware GPS is absent.
+
+struct PhoneGPSData {
+  bool    valid;
+  float   latitude;
+  float   longitude;
+  float   altitude_m;
+  float   speed_kmh;
+  float   heading_deg;
+  unsigned long receivedAt; // millis() when last received
+};
+PhoneGPSData phoneGps = { false, 0, 0, 0, 0, 0, 0 };
+
+#define PHONE_GPS_STALE_MS 3000 // Treat phone GPS as stale after 3s without update
+
+// Returns true if phone GPS is valid and not stale
+bool phoneGpsValid() {
+  return phoneGps.valid && (millis() - phoneGps.receivedAt < PHONE_GPS_STALE_MS);
+}
+
+// Resolved GPS: hardware GPS if valid, else phone GPS if valid, else nothing
+bool resolvedGpsValid() {
+  return gpsData.valid || phoneGpsValid();
+}
+
+float resolvedLat()     { return gpsData.valid ? gpsData.latitude     : phoneGps.latitude;    }
+float resolvedLon()     { return gpsData.valid ? gpsData.longitude    : phoneGps.longitude;   }
+float resolvedAlt()     { return gpsData.valid ? gpsData.altitude_m   : phoneGps.altitude_m;  }
+float resolvedSpeed()   { return gpsData.valid ? gpsData.speed_kmh    : phoneGps.speed_kmh;   }
+float resolvedHeading() { return gpsData.valid ? gpsData.heading_deg  : phoneGps.heading_deg; }
+
 void handleAppCommand(uint8_t num, const String& message) {
   StaticJsonDocument<256> doc;
   if (deserializeJson(doc, message) != DeserializationError::Ok) return;
@@ -686,6 +734,16 @@ void handleAppCommand(uint8_t num, const String& message) {
     replyOK(num, "session_stopped");
   } else if (cmd == "get_status") {
     sendStatusToApp(num);
+  } else if (cmd == "gps_update") {
+    // Phone GPS fallback — used when hardware GPS module is absent or has no fix
+    phoneGps.latitude    = doc["lat"]       | 0.0f;
+    phoneGps.longitude   = doc["lon"]       | 0.0f;
+    phoneGps.altitude_m  = doc["alt_m"]     | 0.0f;
+    phoneGps.speed_kmh   = doc["speed_kmh"] | 0.0f;
+    phoneGps.heading_deg = doc["heading"]   | 0.0f;
+    phoneGps.valid       = (phoneGps.latitude != 0.0f || phoneGps.longitude != 0.0f);
+    phoneGps.receivedAt  = millis();
+    // No reply needed — fire-and-forget from app
   }
 }
 
@@ -989,6 +1047,20 @@ The digital dash should display sensors as "offline" (gray) when their valid fla
 | `start_session` | — | Mark session active (broadcast to mesh) |
 | `stop_session` | — | Mark session inactive |
 | `get_status` | — | Full node status response |
+| `gps_update` | `{ "lat": 36.1, "lon": -96.5, "speed_kmh": 80.0, "heading": 247.0, "alt_m": 284.0 }` | Phone GPS fallback — sent by app when hardware GPS is absent or has no fix |
+
+### Phone GPS Fallback — Architecture
+
+The vehicle node connects to **exactly one** phone app via WebSocket. When the hardware GPS module (NEO-6M etc.) is absent or has not acquired a fix, the app detects the missing `gps` block in telemetry frames and begins sending its own device GPS via `gps_update` commands at 1Hz.
+
+**Fallback Priority:**
+1. Hardware GPS (NEO-6M / NEO-M8N via UART) — always preferred
+2. Phone device GPS (`gps_update` from connected app) — automatic fallback
+3. No GPS — `gps` block omitted from all telemetry frames
+
+Phone GPS data is treated as stale after `PHONE_GPS_STALE_MS` (3000ms) without a new update, preventing stale position from propagating through the mesh.
+
+The `gsrc` field in mesh compact frames indicates the GPS source: `0` = hardware, `1` = phone.
 
 ---
 
