@@ -14,7 +14,6 @@ import LeafletMapView, { LeafletMapHandle } from "@/components/LeafletMapView";
 import * as Location from "expo-location";
 import {
   Flag,
-  Radio,
   MapPin,
   Play,
   Square,
@@ -30,6 +29,8 @@ import {
   Maximize2,
   Send,
   BookmarkPlus,
+  Mic,
+  Check,
 } from "lucide-react-native";
 import TuningConsole from "@/app/(tabs)/race/tuning";
 
@@ -1924,75 +1925,590 @@ const lapStyles = StyleSheet.create({
   },
 });
 
-function PlaceholderScreen({
-  icon,
-  title,
-  subtitle,
-  tag,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  tag: string;
-}) {
+type PITSubTab = "comms" | "messages" | "log";
+type MsgPriority = "critical" | "high" | "normal" | "info";
+type MsgCategory = "strategy" | "instruction" | "reminder" | "warning" | "info";
+type MsgStatus = "unread" | "read" | "acknowledged";
+type PitLogType = "lap" | "flag" | "pit" | "comms" | "system";
+
+interface PitMessage {
+  id: string;
+  timestamp: string;
+  priority: MsgPriority;
+  category: MsgCategory;
+  text: string;
+  status: MsgStatus;
+  sender: string;
+}
+
+interface PitLogEntry {
+  id: string;
+  timestamp: string;
+  type: PitLogType;
+  text: string;
+}
+
+const INITIAL_PIT_MESSAGES: PitMessage[] = [
+  { id: "m1", timestamp: "12:34:05", priority: "critical", category: "strategy", text: "BOX THIS LAP — tire change scheduled", status: "unread", sender: "Race Eng." },
+  { id: "m2", timestamp: "12:31:18", priority: "high", category: "instruction", text: "Increase pace — gap to P2 closing, now 4.2s", status: "read", sender: "Race Eng." },
+  { id: "m3", timestamp: "12:28:44", priority: "normal", category: "reminder", text: "Fuel map 3 — economy mode, hold for 5 laps", status: "acknowledged", sender: "Race Eng." },
+  { id: "m4", timestamp: "12:25:00", priority: "info", category: "info", text: "Safety car deployed — maintain gap, do not overtake", status: "acknowledged", sender: "Race Control" },
+  { id: "m5", timestamp: "12:20:33", priority: "high", category: "warning", text: "Oil temp rising — monitor closely, report any anomaly", status: "acknowledged", sender: "Race Eng." },
+];
+
+const INITIAL_PIT_LOG: PitLogEntry[] = [
+  { id: "l1", timestamp: "12:34:05", type: "pit", text: "Message received: BOX THIS LAP" },
+  { id: "l2", timestamp: "12:33:12", type: "lap", text: "Lap 8 completed — 1:42.334" },
+  { id: "l3", timestamp: "12:31:18", type: "pit", text: "Message received: Increase pace" },
+  { id: "l4", timestamp: "12:30:05", type: "flag", text: "Yellow flag — Sector 2" },
+  { id: "l5", timestamp: "12:28:44", type: "comms", text: "Voice received — Race Eng. (8s)" },
+  { id: "l6", timestamp: "12:27:10", type: "lap", text: "Lap 7 completed — 1:43.821" },
+  { id: "l7", timestamp: "12:25:00", type: "flag", text: "Safety car deployed" },
+  { id: "l8", timestamp: "12:22:34", type: "system", text: "Hub connected — Signal: Strong" },
+];
+
+function PITScreen() {
+  const [subTab, setSubTab] = useState<PITSubTab>("comms");
+  const [messages, setMessages] = useState<PitMessage[]>(INITIAL_PIT_MESSAGES);
+  const [pitLog] = useState<PitLogEntry[]>(INITIAL_PIT_LOG);
+  const [isPTT, setIsPTT] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [signalStrength, setSignalStrength] = useState(3);
+
+  const pttScale = useRef(new Animated.Value(1)).current;
+  const pttGlow = useRef(new Animated.Value(0)).current;
+
+  const unreadCount = messages.filter((m) => m.status === "unread").length;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSignalStrength((prev) => {
+        const drift = Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0;
+        return Math.min(4, Math.max(0, prev + drift));
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handlePTTIn = useCallback(() => {
+    setIsPTT(true);
+    Animated.parallel([
+      Animated.spring(pttScale, { toValue: 0.93, useNativeDriver: true, tension: 200, friction: 8 }),
+      Animated.timing(pttGlow, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start();
+  }, [pttScale, pttGlow]);
+
+  const handlePTTOut = useCallback(() => {
+    setIsPTT(false);
+    Animated.parallel([
+      Animated.spring(pttScale, { toValue: 1, useNativeDriver: true, tension: 200, friction: 8 }),
+      Animated.timing(pttGlow, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, [pttScale, pttGlow]);
+
+  const handleAck = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, status: "acknowledged" as MsgStatus } : m))
+    );
+  }, []);
+
+  const handleRead = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id && m.status === "unread" ? { ...m, status: "read" as MsgStatus } : m))
+    );
+  }, []);
+
+  const getPriorityColor = (priority: MsgPriority): string => {
+    switch (priority) {
+      case "critical": return "#FF1801";
+      case "high": return "#FFD600";
+      case "normal": return "#FFFFFF";
+      case "info": return "#444";
+    }
+  };
+
+  const getLogTypeColor = (type: PitLogType): string => {
+    switch (type) {
+      case "lap": return "#00FF41";
+      case "flag": return "#FFD600";
+      case "pit": return "#FF1801";
+      case "comms": return "#00B4FF";
+      case "system": return "#444";
+    }
+  };
+
+  const getLogTypeLabel = (type: PitLogType): string => {
+    switch (type) {
+      case "lap": return "LAP";
+      case "flag": return "FLAG";
+      case "pit": return "PIT";
+      case "comms": return "COM";
+      case "system": return "SYS";
+    }
+  };
+
+  const signalBars = [1, 2, 3, 4];
+  const signalColor = signalStrength >= 3 ? "#34C759" : signalStrength >= 2 ? "#FFD600" : "#FF1801";
+  const signalLabel = ["—", "POOR", "FAIR", "GOOD", "STRONG"][signalStrength];
+
   return (
-    <View style={phStyles.root}>
-      <View style={phStyles.iconWrap}>{icon}</View>
-      <View style={phStyles.tagWrap}>
-        <Text style={phStyles.tag}>{tag}</Text>
+    <View style={pitStyles.root}>
+      <View style={pitStyles.header}>
+        <View style={pitStyles.connStatus}>
+          <View style={[pitStyles.connDot, { backgroundColor: isConnected ? "#34C759" : "#2a2a2a" }]} />
+          <Text style={[pitStyles.connLabel, { color: isConnected ? "#34C759" : "#333" }]}>
+            {isConnected ? "HUB CONNECTED" : "NO HUB SIGNAL"}
+          </Text>
+        </View>
+        <View style={pitStyles.signalWrap}>
+          <View style={pitStyles.signalBars}>
+            {signalBars.map((level) => (
+              <View
+                key={level}
+                style={[
+                  pitStyles.signalBar,
+                  { height: 4 + level * 3 },
+                  signalStrength >= level
+                    ? { backgroundColor: signalColor }
+                    : { backgroundColor: "#1e1e1e" },
+                ]}
+              />
+            ))}
+          </View>
+          <Text style={[pitStyles.signalLabel, { color: isConnected ? signalColor : "#2a2a2a" }]}>
+            {isConnected ? signalLabel : "——"}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[pitStyles.simBtn, isConnected && pitStyles.simBtnActive]}
+          onPress={() => setIsConnected((v) => !v)}
+          activeOpacity={0.75}
+          testID="pit-connect-btn"
+        >
+          <Text style={[pitStyles.simBtnText, isConnected && pitStyles.simBtnTextActive]}>
+            {isConnected ? "DISCONNECT" : "SIMULATE"}
+          </Text>
+        </TouchableOpacity>
       </View>
-      <Text style={phStyles.title}>{title}</Text>
-      <Text style={phStyles.subtitle}>{subtitle}</Text>
+
+      <View style={pitStyles.subTabBar}>
+        {(["comms", "messages", "log"] as PITSubTab[]).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[pitStyles.subTab, subTab === tab && pitStyles.subTabActive]}
+            onPress={() => setSubTab(tab)}
+            activeOpacity={0.7}
+            testID={`pit-subtab-${tab}`}
+          >
+            <Text style={[pitStyles.subTabText, subTab === tab && pitStyles.subTabTextActive]}>
+              {tab === "messages" && unreadCount > 0 ? `MSGS (${unreadCount})` : tab.toUpperCase()}
+            </Text>
+            {subTab === tab && <View style={pitStyles.subTabIndicator} />}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {subTab === "comms" && (
+        <View style={pitStyles.commsRoot}>
+          <View style={pitStyles.channelRow}>
+            <View style={pitStyles.channelCell}>
+              <Text style={pitStyles.channelLabel}>CHANNEL</Text>
+              <Text style={pitStyles.channelValue}>REYCIN-01</Text>
+            </View>
+            <View style={pitStyles.channelCell}>
+              <Text style={pitStyles.channelLabel}>MODE</Text>
+              <Text style={pitStyles.channelValue}>ESP32 MESH</Text>
+            </View>
+            <View style={[pitStyles.channelCell, pitStyles.channelCellLast]}>
+              <Text style={pitStyles.channelLabel}>LATENCY</Text>
+              <Text style={[pitStyles.channelValue, { color: isConnected ? "#34C759" : "#333" }]}>
+                {isConnected ? "~12ms" : "—"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={pitStyles.pttWrap}>
+            <Animated.View
+              style={[
+                pitStyles.pttRing,
+                {
+                  opacity: pttGlow,
+                  transform: [{ scale: pttScale }],
+                },
+              ]}
+            />
+            <Animated.View style={[pitStyles.pttOuter, { transform: [{ scale: pttScale }] }]}>
+              <TouchableOpacity
+                style={[pitStyles.pttButton, isPTT && pitStyles.pttButtonActive]}
+                onPressIn={handlePTTIn}
+                onPressOut={handlePTTOut}
+                activeOpacity={1}
+                testID="pit-ptt-button"
+              >
+                <Mic size={38} color={isPTT ? "#000" : isConnected ? "#FFF" : "#333"} strokeWidth={1.5} />
+                <Text style={[pitStyles.pttLabel, isPTT && pitStyles.pttLabelActive]}>
+                  {isPTT ? "TRANSMITTING" : "HOLD TO TALK"}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+            <Text style={pitStyles.pttHint}>
+              {isConnected ? "Hold to transmit to pit wall" : "Connect to hub to enable comms"}
+            </Text>
+          </View>
+
+          <View style={pitStyles.voiceLog}>
+            <Text style={pitStyles.voiceLogTitle}>RECENT COMMS</Text>
+            {[
+              { time: "12:28:44", dir: "RX", sender: "Race Eng.", note: "8s" },
+              { time: "12:20:11", dir: "TX", sender: "Driver", note: "3s" },
+              { time: "12:15:30", dir: "RX", sender: "Race Eng.", note: "5s" },
+            ].map((entry, i) => (
+              <View key={i} style={pitStyles.voiceRow}>
+                <Text style={pitStyles.voiceTime}>{entry.time}</Text>
+                <View
+                  style={[
+                    pitStyles.dirBadge,
+                    { backgroundColor: entry.dir === "TX" ? "#1a0800" : "#001209" },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      pitStyles.dirText,
+                      { color: entry.dir === "TX" ? "#FF6B00" : "#34C759" },
+                    ]}
+                  >
+                    {entry.dir}
+                  </Text>
+                </View>
+                <Text style={pitStyles.voiceSender}>{entry.sender}</Text>
+                <Text style={pitStyles.voiceDuration}>{entry.note}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {subTab === "messages" && (
+        <ScrollView
+          style={pitStyles.msgScroll}
+          contentContainerStyle={pitStyles.msgContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {messages.map((msg) => (
+            <TouchableOpacity
+              key={msg.id}
+              style={[
+                pitStyles.msgCard,
+                msg.status === "unread" && pitStyles.msgCardUnread,
+                msg.priority === "critical" && pitStyles.msgCardCritical,
+              ]}
+              onPress={() => handleRead(msg.id)}
+              activeOpacity={0.8}
+              testID={`pit-msg-${msg.id}`}
+            >
+              <View style={pitStyles.msgCardHeader}>
+                <View
+                  style={[
+                    pitStyles.priorityBar,
+                    { backgroundColor: getPriorityColor(msg.priority) },
+                  ]}
+                />
+                <View style={pitStyles.msgMeta}>
+                  <Text style={[pitStyles.msgCategory, { color: getPriorityColor(msg.priority) }]}>
+                    {msg.category.toUpperCase()}
+                  </Text>
+                  <View style={pitStyles.msgMetaRight}>
+                    <Text style={pitStyles.msgSender}>{msg.sender}</Text>
+                    <Text style={pitStyles.msgTime}>{msg.timestamp}</Text>
+                  </View>
+                </View>
+              </View>
+              <Text
+                style={[
+                  pitStyles.msgText,
+                  msg.status === "unread" && pitStyles.msgTextUnread,
+                ]}
+              >
+                {msg.text}
+              </Text>
+              <View style={pitStyles.msgFooter}>
+                {msg.status === "acknowledged" ? (
+                  <View style={pitStyles.ackedBadge}>
+                    <Check size={9} color="#34C759" strokeWidth={2.5} />
+                    <Text style={pitStyles.ackedText}>ACKNOWLEDGED</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={pitStyles.ackBtn}
+                    onPress={() => handleAck(msg.id)}
+                    activeOpacity={0.75}
+                    testID={`pit-ack-${msg.id}`}
+                  >
+                    <Text style={pitStyles.ackBtnText}>ACKNOWLEDGE</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {subTab === "log" && (
+        <ScrollView style={pitStyles.logScroll} showsVerticalScrollIndicator={false}>
+          <View style={pitStyles.logContent}>
+            {pitLog.map((entry) => (
+              <View key={entry.id} style={pitStyles.logRow} testID={`pit-log-${entry.id}`}>
+                <Text style={pitStyles.logTime}>{entry.timestamp}</Text>
+                <View
+                  style={[
+                    pitStyles.logTypeBadge,
+                    { borderColor: getLogTypeColor(entry.type) + "44" },
+                  ]}
+                >
+                  <Text style={[pitStyles.logTypeText, { color: getLogTypeColor(entry.type) }]}>
+                    {getLogTypeLabel(entry.type)}
+                  </Text>
+                </View>
+                <Text style={pitStyles.logText} numberOfLines={2}>
+                  {entry.text}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
 
-const phStyles = StyleSheet.create({
-  root: {
+const pitStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#000" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#111",
+    gap: 10,
+  },
+  connStatus: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6 },
+  connDot: { width: 7, height: 7, borderRadius: 3.5 },
+  connLabel: { fontSize: 9, fontWeight: "700", letterSpacing: 1.5 },
+  signalWrap: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
+  signalBars: { flexDirection: "row", alignItems: "flex-end", gap: 3 },
+  signalBar: { width: 5, borderRadius: 1.5 },
+  signalLabel: { fontSize: 8, fontWeight: "700", letterSpacing: 1 },
+  simBtn: {
+    borderWidth: 1,
+    borderColor: "#1e1e1e",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 4,
+  },
+  simBtnActive: {
+    borderColor: "#0a2a00",
+    backgroundColor: "rgba(52,199,89,0.06)",
+  },
+  simBtnText: { fontSize: 9, fontWeight: "700", color: "#333", letterSpacing: 1 },
+  simBtnTextActive: { color: "#34C759" },
+  subTabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#111",
+  },
+  subTab: {
     flex: 1,
-    backgroundColor: "#000",
+    paddingVertical: 11,
+    alignItems: "center",
+    position: "relative",
+  },
+  subTabActive: {},
+  subTabText: { fontSize: 9, fontWeight: "700", color: "#2a2a2a", letterSpacing: 1.5 },
+  subTabTextActive: { color: "#FFF" },
+  subTabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: "20%",
+    right: "20%",
+    height: 2,
+    backgroundColor: "#FF1801",
+    borderRadius: 1,
+  },
+  commsRoot: { flex: 1 },
+  channelRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#0d0d0d",
+  },
+  channelCell: {
+    flex: 1,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    gap: 3,
+    borderRightWidth: 1,
+    borderRightColor: "#0d0d0d",
+  },
+  channelCellLast: { borderRightWidth: 0 },
+  channelLabel: { fontSize: 8, fontWeight: "700", color: "#2a2a2a", letterSpacing: 1.5 },
+  channelValue: { fontSize: 12, fontWeight: "600", color: "#FFF", letterSpacing: 0.3 },
+  pttWrap: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 40,
-    gap: 12,
+    gap: 18,
   },
-  iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: "#0d0d0d",
+  pttRing: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "rgba(255,24,1,0.12)",
+  },
+  pttOuter: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
     borderWidth: 1,
     borderColor: "#1a1a1a",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    backgroundColor: "#080808",
   },
-  tagWrap: {
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#222",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 4,
+  pttButton: {
+    width: 142,
+    height: 142,
+    borderRadius: 71,
+    backgroundColor: "#0f0f0f",
+    borderWidth: 2,
+    borderColor: "#1e1e1e",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
   },
-  tag: {
+  pttButtonActive: {
+    backgroundColor: "#FF1801",
+    borderColor: "#FF1801",
+  },
+  pttLabel: { fontSize: 9, fontWeight: "700", color: "#444", letterSpacing: 1.5 },
+  pttLabelActive: { color: "#000" },
+  pttHint: { fontSize: 11, color: "#2a2a2a", textAlign: "center", paddingHorizontal: 40 },
+  voiceLog: {
+    borderTopWidth: 1,
+    borderTopColor: "#0d0d0d",
+    padding: 16,
+    gap: 11,
+  },
+  voiceLogTitle: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#444",
-    letterSpacing: 2,
+    color: "#2a2a2a",
+    letterSpacing: 1.5,
+    marginBottom: 2,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#FFF",
-    textAlign: "center",
-    letterSpacing: -0.3,
+  voiceRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  voiceTime: {
+    fontSize: 11,
+    color: "#2a2a2a",
+    fontVariant: ["tabular-nums"] as const,
+    width: 52,
   },
-  subtitle: {
-    fontSize: 13,
-    color: "#444",
-    textAlign: "center",
+  dirBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 },
+  dirText: { fontSize: 9, fontWeight: "700", letterSpacing: 1 },
+  voiceSender: { fontSize: 12, color: "#CCC", fontWeight: "500", flex: 1 },
+  voiceDuration: { fontSize: 10, color: "#333" },
+  msgScroll: { flex: 1 },
+  msgContent: { padding: 12, gap: 10, paddingBottom: 28 },
+  msgCard: {
+    backgroundColor: "#080808",
+    borderWidth: 1,
+    borderColor: "#141414",
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  msgCardUnread: {
+    borderColor: "#251000",
+    backgroundColor: "#0a0600",
+  },
+  msgCardCritical: {
+    borderColor: "#3a0800",
+    backgroundColor: "#0d0200",
+  },
+  msgCardHeader: { flexDirection: "row" },
+  priorityBar: { width: 3 },
+  msgMeta: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  msgCategory: { fontSize: 9, fontWeight: "700", letterSpacing: 1.5, flex: 1 },
+  msgMetaRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  msgSender: { fontSize: 10, color: "#444", fontWeight: "600" },
+  msgTime: {
+    fontSize: 10,
+    color: "#333",
+    fontVariant: ["tabular-nums"] as const,
+  },
+  msgText: {
+    fontSize: 14,
+    color: "#555",
     lineHeight: 20,
+    letterSpacing: -0.2,
+    paddingHorizontal: 15,
+    paddingBottom: 12,
+  },
+  msgTextUnread: { color: "#EEE", fontWeight: "500" },
+  msgFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  ackedBadge: { flexDirection: "row", alignItems: "center", gap: 5 },
+  ackedText: { fontSize: 9, fontWeight: "700", color: "#34C759", letterSpacing: 1 },
+  ackBtn: {
+    borderWidth: 1,
+    borderColor: "#2a2500",
+    backgroundColor: "rgba(255,214,0,0.05)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 5,
+  },
+  ackBtnText: { fontSize: 9, fontWeight: "700", color: "#FFD600", letterSpacing: 1.5 },
+  logScroll: { flex: 1 },
+  logContent: { padding: 14, gap: 0, paddingBottom: 28 },
+  logRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: "#0a0a0a",
+  },
+  logTime: {
+    fontSize: 10,
+    color: "#2a2a2a",
+    fontVariant: ["tabular-nums"] as const,
+    width: 52,
+    paddingTop: 1,
+  },
+  logTypeBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+    marginTop: 1,
+  },
+  logTypeText: { fontSize: 8, fontWeight: "700", letterSpacing: 1 },
+  logText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#666",
+    lineHeight: 17,
+    letterSpacing: -0.1,
   },
 });
 
@@ -2033,14 +2549,7 @@ export default function RaceScreen() {
       case "tuning":
         return <TuningConsole />;
       case "pit":
-        return (
-          <PlaceholderScreen
-            icon={<Radio size={32} color="#333" strokeWidth={1.5} />}
-            title="Reycin PIT Manager"
-            subtitle="Real-time vehicle-to-pit communication via ESP32+GPS primary with phone GPS fallback. Pit wall telemetry dashboard in development."
-            tag="COMING SOON"
-          />
-        );
+        return <PITScreen />;
     }
   };
 
