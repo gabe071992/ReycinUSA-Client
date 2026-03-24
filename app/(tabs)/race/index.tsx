@@ -2303,24 +2303,9 @@ interface PitLogEntry {
   text: string;
 }
 
-const INITIAL_PIT_MESSAGES: PitMessage[] = [
-  { id: "m1", timestamp: "12:34:05", priority: "critical", category: "strategy", text: "BOX THIS LAP — tire change scheduled", status: "unread", sender: "Race Eng." },
-  { id: "m2", timestamp: "12:31:18", priority: "high", category: "instruction", text: "Increase pace — gap to P2 closing, now 4.2s", status: "read", sender: "Race Eng." },
-  { id: "m3", timestamp: "12:28:44", priority: "normal", category: "reminder", text: "Fuel map 3 — economy mode, hold for 5 laps", status: "acknowledged", sender: "Race Eng." },
-  { id: "m4", timestamp: "12:25:00", priority: "info", category: "info", text: "Safety car deployed — maintain gap, do not overtake", status: "acknowledged", sender: "Race Control" },
-  { id: "m5", timestamp: "12:20:33", priority: "high", category: "warning", text: "Oil temp rising — monitor closely, report any anomaly", status: "acknowledged", sender: "Race Eng." },
-];
+const INITIAL_PIT_MESSAGES: PitMessage[] = [];
 
-const INITIAL_PIT_LOG: PitLogEntry[] = [
-  { id: "l1", timestamp: "12:34:05", type: "pit", text: "Message received: BOX THIS LAP" },
-  { id: "l2", timestamp: "12:33:12", type: "lap", text: "Lap 8 completed — 1:42.334" },
-  { id: "l3", timestamp: "12:31:18", type: "pit", text: "Message received: Increase pace" },
-  { id: "l4", timestamp: "12:30:05", type: "flag", text: "Yellow flag — Sector 2" },
-  { id: "l5", timestamp: "12:28:44", type: "comms", text: "Voice received — Race Eng. (8s)" },
-  { id: "l6", timestamp: "12:27:10", type: "lap", text: "Lap 7 completed — 1:43.821" },
-  { id: "l7", timestamp: "12:25:00", type: "flag", text: "Safety car deployed" },
-  { id: "l8", timestamp: "12:22:34", type: "system", text: "Hub connected — Signal: Strong" },
-];
+const INITIAL_PIT_LOG: PitLogEntry[] = [];
 
 function PITScreen() {
   const [subTab, setSubTab] = useState<PITSubTab>("comms");
@@ -2513,11 +2498,7 @@ function PITScreen() {
 
           <View style={pitStyles.voiceLog}>
             <Text style={pitStyles.voiceLogTitle}>RECENT COMMS</Text>
-            {[
-              { time: "12:28:44", dir: "RX", sender: "Race Eng.", note: "8s" },
-              { time: "12:20:11", dir: "TX", sender: "Driver", note: "3s" },
-              { time: "12:15:30", dir: "RX", sender: "Race Eng.", note: "5s" },
-            ].map((entry, i) => (
+            {([] as { time: string; dir: string; sender: string; note: string }[]).map((entry, i) => (
               <View key={i} style={pitStyles.voiceRow}>
                 <Text style={pitStyles.voiceTime}>{entry.time}</Text>
                 <View
