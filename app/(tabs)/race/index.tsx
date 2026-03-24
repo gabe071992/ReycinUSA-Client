@@ -40,6 +40,8 @@ import {
 import TuningConsole from "@/app/(tabs)/race/tuning";
 import { useOBD } from "@/providers/OBDProvider";
 import { useLapTimer } from "@/providers/LapTimerProvider";
+import { usePIT } from "@/providers/PITProvider";
+import type { MsgPriority, PitLogType } from "@/providers/PITProvider";
 
 type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit";
 
@@ -2281,155 +2283,172 @@ const lapStyles = StyleSheet.create({
 
 
 type PITSubTab = "comms" | "messages" | "log";
-type MsgPriority = "critical" | "high" | "normal" | "info";
-type MsgCategory = "strategy" | "instruction" | "reminder" | "warning" | "info";
-type MsgStatus = "unread" | "read" | "acknowledged";
-type PitLogType = "lap" | "flag" | "pit" | "comms" | "system";
 
-interface PitMessage {
-  id: string;
-  timestamp: string;
-  priority: MsgPriority;
-  category: MsgCategory;
-  text: string;
-  status: MsgStatus;
-  sender: string;
+function getPriorityColor(priority: MsgPriority): string {
+  switch (priority) {
+    case "critical": return "#FF1801";
+    case "high": return "#FFD600";
+    case "normal": return "#FFFFFF";
+    case "info": return "#444";
+  }
 }
 
-interface PitLogEntry {
-  id: string;
-  timestamp: string;
-  type: PitLogType;
-  text: string;
+function getLogTypeColor(type: PitLogType): string {
+  switch (type) {
+    case "lap": return "#00FF41";
+    case "flag": return "#FFD600";
+    case "pit": return "#FF1801";
+    case "comms": return "#00B4FF";
+    case "system": return "#555";
+  }
 }
 
-const INITIAL_PIT_MESSAGES: PitMessage[] = [];
-
-const INITIAL_PIT_LOG: PitLogEntry[] = [];
+function getLogTypeLabel(type: PitLogType): string {
+  switch (type) {
+    case "lap": return "LAP";
+    case "flag": return "FLAG";
+    case "pit": return "PIT";
+    case "comms": return "COM";
+    case "system": return "SYS";
+  }
+}
 
 function PITScreen() {
+  const {
+    hubStatus, isConnected, signalBars, rssi, activeFlag,
+    messages, log, voiceLog, unreadCount, isSimulating,
+    connectHub, disconnectHub, startSimulate, stopSimulate,
+    ackMessage, markRead, logVoiceTX,
+  } = usePIT();
+  const { laps, currentLapElapsed } = useLapTimer();
+
   const [subTab, setSubTab] = useState<PITSubTab>("comms");
-  const [messages, setMessages] = useState<PitMessage[]>(INITIAL_PIT_MESSAGES);
-  const [pitLog] = useState<PitLogEntry[]>(INITIAL_PIT_LOG);
   const [isPTT, setIsPTT] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [signalStrength, setSignalStrength] = useState(3);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [urlInput, setUrlInput] = useState("ws://192.168.4.2:82");
+  const pttStartRef = useRef(0);
 
   const pttScale = useRef(new Animated.Value(1)).current;
   const pttGlow = useRef(new Animated.Value(0)).current;
 
-  const unreadCount = messages.filter((m) => m.status === "unread").length;
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSignalStrength((prev) => {
-        const drift = Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0;
-        return Math.min(4, Math.max(0, prev + drift));
-      });
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
   const handlePTTIn = useCallback(() => {
+    if (!isConnected) return;
+    pttStartRef.current = Date.now();
     setIsPTT(true);
     Animated.parallel([
       Animated.spring(pttScale, { toValue: 0.93, useNativeDriver: true, tension: 200, friction: 8 }),
       Animated.timing(pttGlow, { toValue: 1, duration: 150, useNativeDriver: true }),
     ]).start();
-  }, [pttScale, pttGlow]);
+  }, [isConnected, pttScale, pttGlow]);
 
   const handlePTTOut = useCallback(() => {
+    if (!isPTT) return;
+    const durMs = Date.now() - pttStartRef.current;
     setIsPTT(false);
+    logVoiceTX(durMs);
     Animated.parallel([
       Animated.spring(pttScale, { toValue: 1, useNativeDriver: true, tension: 200, friction: 8 }),
       Animated.timing(pttGlow, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start();
-  }, [pttScale, pttGlow]);
+  }, [isPTT, pttScale, pttGlow, logVoiceTX]);
 
-  const handleAck = useCallback((id: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, status: "acknowledged" as MsgStatus } : m))
-    );
-  }, []);
+  const handleConnect = useCallback(() => {
+    connectHub(urlInput.trim() || "ws://192.168.4.2:82");
+    setShowConnectModal(false);
+  }, [connectHub, urlInput]);
 
-  const handleRead = useCallback((id: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id && m.status === "unread" ? { ...m, status: "read" as MsgStatus } : m))
-    );
-  }, []);
+  const signalColor = signalBars >= 3 ? "#34C759" : signalBars >= 2 ? "#FFD600" : signalBars >= 1 ? "#FF3B30" : "#2a2a2a";
+  const signalLabelText = ["—", "POOR", "FAIR", "GOOD", "STRONG"][Math.min(signalBars, 4)];
 
-  const getPriorityColor = (priority: MsgPriority): string => {
-    switch (priority) {
-      case "critical": return "#FF1801";
-      case "high": return "#FFD600";
-      case "normal": return "#FFFFFF";
-      case "info": return "#444";
-    }
-  };
+  const connColor = isConnected ? "#34C759" : hubStatus === "connecting" ? "#FF9500" : hubStatus === "error" ? "#FF3B30" : "#333";
+  const connLabel = isConnected ? "HUB CONNECTED" : hubStatus === "connecting" ? "CONNECTING..." : hubStatus === "error" ? "HUB ERROR" : "NO HUB SIGNAL";
 
-  const getLogTypeColor = (type: PitLogType): string => {
-    switch (type) {
-      case "lap": return "#00FF41";
-      case "flag": return "#FFD600";
-      case "pit": return "#FF1801";
-      case "comms": return "#00B4FF";
-      case "system": return "#444";
-    }
-  };
+  const flagColor = activeFlag === "red" ? "#FF1801" : activeFlag === "yellow" ? "#FFD600" : activeFlag === "sc" ? "#FF9500" : activeFlag === "chequered" ? "#EEE" : "#34C759";
+  const flagLabelText = activeFlag === "red" ? "RED FLAG" : activeFlag === "yellow" ? "YELLOW" : activeFlag === "sc" ? "SAFETY CAR" : activeFlag === "chequered" ? "CHEQUERED" : "GREEN";
 
-  const getLogTypeLabel = (type: PitLogType): string => {
-    switch (type) {
-      case "lap": return "LAP";
-      case "flag": return "FLAG";
-      case "pit": return "PIT";
-      case "comms": return "COM";
-      case "system": return "SYS";
-    }
-  };
-
-  const signalBars = [1, 2, 3, 4];
-  const signalColor = signalStrength >= 3 ? "#34C759" : signalStrength >= 2 ? "#FFD600" : "#FF1801";
-  const signalLabel = ["—", "POOR", "FAIR", "GOOD", "STRONG"][signalStrength];
+  const lapNum = laps.length;
 
   return (
     <View style={pitStyles.root}>
       <View style={pitStyles.header}>
         <View style={pitStyles.connStatus}>
-          <View style={[pitStyles.connDot, { backgroundColor: isConnected ? "#34C759" : "#2a2a2a" }]} />
-          <Text style={[pitStyles.connLabel, { color: isConnected ? "#34C759" : "#333" }]}>
-            {isConnected ? "HUB CONNECTED" : "NO HUB SIGNAL"}
-          </Text>
+          <View style={[pitStyles.connDot, { backgroundColor: connColor }]} />
+          <Text style={[pitStyles.connLabel, { color: connColor }]}>{connLabel}</Text>
         </View>
-        <View style={pitStyles.signalWrap}>
-          <View style={pitStyles.signalBars}>
-            {signalBars.map((level) => (
-              <View
-                key={level}
-                style={[
-                  pitStyles.signalBar,
-                  { height: 4 + level * 3 },
-                  signalStrength >= level
-                    ? { backgroundColor: signalColor }
-                    : { backgroundColor: "#1e1e1e" },
-                ]}
-              />
-            ))}
+        {isConnected && (
+          <View style={pitStyles.signalWrap}>
+            <View style={pitStyles.signalBars}>
+              {[1, 2, 3, 4].map((level) => (
+                <View
+                  key={level}
+                  style={[
+                    pitStyles.signalBar,
+                    { height: 4 + level * 3 },
+                    signalBars >= level ? { backgroundColor: signalColor } : { backgroundColor: "#1e1e1e" },
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={[pitStyles.signalLabel, { color: signalColor }]}>{signalLabelText}</Text>
           </View>
-          <Text style={[pitStyles.signalLabel, { color: isConnected ? signalColor : "#2a2a2a" }]}>
-            {isConnected ? signalLabel : "——"}
-          </Text>
+        )}
+        <View style={pitStyles.headerBtns}>
+          {isSimulating ? (
+            <TouchableOpacity style={[pitStyles.headerBtn, pitStyles.headerBtnDanger]} onPress={stopSimulate} activeOpacity={0.75} testID="pit-stop-sim-btn">
+              <Text style={[pitStyles.headerBtnText, { color: "#FF3B30" }]}>STOP SIM</Text>
+            </TouchableOpacity>
+          ) : isConnected ? (
+            <TouchableOpacity style={pitStyles.headerBtn} onPress={disconnectHub} activeOpacity={0.75} testID="pit-disconnect-btn">
+              <Text style={pitStyles.headerBtnText}>DISCONNECT</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[pitStyles.headerBtn, pitStyles.headerBtnPrimary]}
+                onPress={() => setShowConnectModal(true)}
+                activeOpacity={0.75}
+                testID="pit-connect-btn"
+                disabled={hubStatus === "connecting"}
+              >
+                <Text style={[pitStyles.headerBtnText, { color: hubStatus === "connecting" ? "#555" : "#FFF" }]}>
+                  {hubStatus === "connecting" ? "..." : "CONNECT"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[pitStyles.headerBtn, pitStyles.headerBtnSim]} onPress={startSimulate} activeOpacity={0.75} testID="pit-simulate-btn">
+                <Text style={[pitStyles.headerBtnText, { color: "#FF9500" }]}>SIMULATE</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
-        <TouchableOpacity
-          style={[pitStyles.simBtn, isConnected && pitStyles.simBtnActive]}
-          onPress={() => setIsConnected((v) => !v)}
-          activeOpacity={0.75}
-          testID="pit-connect-btn"
-        >
-          <Text style={[pitStyles.simBtnText, isConnected && pitStyles.simBtnTextActive]}>
-            {isConnected ? "DISCONNECT" : "SIMULATE"}
-          </Text>
-        </TouchableOpacity>
       </View>
+
+      {isConnected && (
+        <View style={pitStyles.sessionBar}>
+          <View style={pitStyles.sessionCell}>
+            <Text style={pitStyles.sessionLabel}>LAP</Text>
+            <Text style={pitStyles.sessionValue}>{lapNum > 0 ? String(lapNum) : "—"}</Text>
+          </View>
+          <View style={pitStyles.sessionDivider} />
+          <View style={pitStyles.sessionCell}>
+            <Text style={pitStyles.sessionLabel}>CURRENT</Text>
+            <Text style={pitStyles.sessionValue}>{formatTimeColon(currentLapElapsed)}</Text>
+          </View>
+          <View style={pitStyles.sessionDivider} />
+          <View style={[pitStyles.sessionCell, pitStyles.sessionFlagCell]}>
+            <View style={[pitStyles.flagDot, { backgroundColor: flagColor }]} />
+            <Text style={[pitStyles.flagLabelText, { color: flagColor }]}>{flagLabelText}</Text>
+          </View>
+          {rssi !== null && (
+            <>
+              <View style={pitStyles.sessionDivider} />
+              <View style={pitStyles.sessionCell}>
+                <Text style={pitStyles.sessionLabel}>RSSI</Text>
+                <Text style={[pitStyles.sessionValue, { color: signalColor, fontSize: 11 }]}>{rssi} dBm</Text>
+              </View>
+            </>
+          )}
+        </View>
+      )}
 
       <View style={pitStyles.subTabBar}>
         {(["comms", "messages", "log"] as PITSubTab[]).map((tab) => (
@@ -2468,25 +2487,18 @@ function PITScreen() {
           </View>
 
           <View style={pitStyles.pttWrap}>
-            <Animated.View
-              style={[
-                pitStyles.pttRing,
-                {
-                  opacity: pttGlow,
-                  transform: [{ scale: pttScale }],
-                },
-              ]}
-            />
+            <Animated.View style={[pitStyles.pttRing, { opacity: pttGlow, transform: [{ scale: pttScale }] }]} />
             <Animated.View style={[pitStyles.pttOuter, { transform: [{ scale: pttScale }] }]}>
               <TouchableOpacity
-                style={[pitStyles.pttButton, isPTT && pitStyles.pttButtonActive]}
+                style={[pitStyles.pttButton, isPTT && pitStyles.pttButtonActive, !isConnected && pitStyles.pttButtonDisabled]}
                 onPressIn={handlePTTIn}
                 onPressOut={handlePTTOut}
                 activeOpacity={1}
+                disabled={!isConnected}
                 testID="pit-ptt-button"
               >
-                <Mic size={38} color={isPTT ? "#000" : isConnected ? "#FFF" : "#333"} strokeWidth={1.5} />
-                <Text style={[pitStyles.pttLabel, isPTT && pitStyles.pttLabelActive]}>
+                <Mic size={38} color={isPTT ? "#000" : isConnected ? "#FFF" : "#2a2a2a"} strokeWidth={1.5} />
+                <Text style={[pitStyles.pttLabel, isPTT && pitStyles.pttLabelActive, !isConnected && pitStyles.pttLabelDisabled]}>
                   {isPTT ? "TRANSMITTING" : "HOLD TO TALK"}
                 </Text>
               </TouchableOpacity>
@@ -2498,121 +2510,136 @@ function PITScreen() {
 
           <View style={pitStyles.voiceLog}>
             <Text style={pitStyles.voiceLogTitle}>RECENT COMMS</Text>
-            {([] as { time: string; dir: string; sender: string; note: string }[]).map((entry, i) => (
-              <View key={i} style={pitStyles.voiceRow}>
-                <Text style={pitStyles.voiceTime}>{entry.time}</Text>
-                <View
-                  style={[
-                    pitStyles.dirBadge,
-                    { backgroundColor: entry.dir === "TX" ? "#1a0800" : "#001209" },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      pitStyles.dirText,
-                      { color: entry.dir === "TX" ? "#FF6B00" : "#34C759" },
-                    ]}
-                  >
-                    {entry.dir}
-                  </Text>
+            {voiceLog.length === 0 ? (
+              <Text style={pitStyles.emptySmall}>No voice comms yet</Text>
+            ) : (
+              voiceLog.slice(0, 6).map((entry) => (
+                <View key={entry.id} style={pitStyles.voiceRow}>
+                  <Text style={pitStyles.voiceTime}>{entry.timestamp}</Text>
+                  <View style={[pitStyles.dirBadge, { backgroundColor: entry.direction === "TX" ? "#1a0800" : "#001209" }]}>
+                    <Text style={[pitStyles.dirText, { color: entry.direction === "TX" ? "#FF6B00" : "#34C759" }]}>
+                      {entry.direction}
+                    </Text>
+                  </View>
+                  <Text style={pitStyles.voiceSender}>{entry.sender}</Text>
+                  <Text style={pitStyles.voiceDuration}>{Math.round(entry.durationMs / 1000)}s</Text>
                 </View>
-                <Text style={pitStyles.voiceSender}>{entry.sender}</Text>
-                <Text style={pitStyles.voiceDuration}>{entry.note}</Text>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         </View>
       )}
 
       {subTab === "messages" && (
-        <ScrollView
-          style={pitStyles.msgScroll}
-          contentContainerStyle={pitStyles.msgContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.map((msg) => (
-            <TouchableOpacity
-              key={msg.id}
-              style={[
-                pitStyles.msgCard,
-                msg.status === "unread" && pitStyles.msgCardUnread,
-                msg.priority === "critical" && pitStyles.msgCardCritical,
-              ]}
-              onPress={() => handleRead(msg.id)}
-              activeOpacity={0.8}
-              testID={`pit-msg-${msg.id}`}
-            >
-              <View style={pitStyles.msgCardHeader}>
-                <View
-                  style={[
-                    pitStyles.priorityBar,
-                    { backgroundColor: getPriorityColor(msg.priority) },
-                  ]}
-                />
-                <View style={pitStyles.msgMeta}>
-                  <Text style={[pitStyles.msgCategory, { color: getPriorityColor(msg.priority) }]}>
-                    {msg.category.toUpperCase()}
-                  </Text>
-                  <View style={pitStyles.msgMetaRight}>
-                    <Text style={pitStyles.msgSender}>{msg.sender}</Text>
-                    <Text style={pitStyles.msgTime}>{msg.timestamp}</Text>
+        <ScrollView style={pitStyles.msgScroll} contentContainerStyle={pitStyles.msgContent} showsVerticalScrollIndicator={false}>
+          {messages.length === 0 ? (
+            <View style={pitStyles.emptyState}>
+              <Text style={pitStyles.emptyTitle}>No Messages</Text>
+              <Text style={pitStyles.emptySub}>
+                {isConnected ? "Messages from the pit wall will appear here" : "Connect to hub to receive pit wall messages"}
+              </Text>
+            </View>
+          ) : (
+            messages.map((msg) => (
+              <TouchableOpacity
+                key={msg.id}
+                style={[
+                  pitStyles.msgCard,
+                  msg.status === "unread" && pitStyles.msgCardUnread,
+                  msg.priority === "critical" && pitStyles.msgCardCritical,
+                ]}
+                onPress={() => markRead(msg.id)}
+                activeOpacity={0.8}
+                testID={`pit-msg-${msg.id}`}
+              >
+                <View style={pitStyles.msgCardHeader}>
+                  <View style={[pitStyles.priorityBar, { backgroundColor: getPriorityColor(msg.priority) }]} />
+                  <View style={pitStyles.msgMeta}>
+                    <Text style={[pitStyles.msgCategory, { color: getPriorityColor(msg.priority) }]}>
+                      {msg.category.toUpperCase()}
+                    </Text>
+                    <View style={pitStyles.msgMetaRight}>
+                      <Text style={pitStyles.msgSender}>{msg.sender}</Text>
+                      <Text style={pitStyles.msgTime}>{msg.timestamp}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-              <Text
-                style={[
-                  pitStyles.msgText,
-                  msg.status === "unread" && pitStyles.msgTextUnread,
-                ]}
-              >
-                {msg.text}
-              </Text>
-              <View style={pitStyles.msgFooter}>
-                {msg.status === "acknowledged" ? (
-                  <View style={pitStyles.ackedBadge}>
-                    <Check size={9} color="#34C759" strokeWidth={2.5} />
-                    <Text style={pitStyles.ackedText}>ACKNOWLEDGED</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={pitStyles.ackBtn}
-                    onPress={() => handleAck(msg.id)}
-                    activeOpacity={0.75}
-                    testID={`pit-ack-${msg.id}`}
-                  >
-                    <Text style={pitStyles.ackBtnText}>ACKNOWLEDGE</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+                <Text style={[pitStyles.msgText, msg.status === "unread" && pitStyles.msgTextUnread]}>
+                  {msg.text}
+                </Text>
+                <View style={pitStyles.msgFooter}>
+                  {msg.status === "acknowledged" ? (
+                    <View style={pitStyles.ackedBadge}>
+                      <Check size={9} color="#34C759" strokeWidth={2.5} />
+                      <Text style={pitStyles.ackedText}>ACKNOWLEDGED</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={pitStyles.ackBtn} onPress={() => ackMessage(msg.id)} activeOpacity={0.75} testID={`pit-ack-${msg.id}`}>
+                      <Text style={pitStyles.ackBtnText}>ACKNOWLEDGE</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
         </ScrollView>
       )}
 
       {subTab === "log" && (
         <ScrollView style={pitStyles.logScroll} showsVerticalScrollIndicator={false}>
           <View style={pitStyles.logContent}>
-            {pitLog.map((entry) => (
-              <View key={entry.id} style={pitStyles.logRow} testID={`pit-log-${entry.id}`}>
-                <Text style={pitStyles.logTime}>{entry.timestamp}</Text>
-                <View
-                  style={[
-                    pitStyles.logTypeBadge,
-                    { borderColor: getLogTypeColor(entry.type) + "44" },
-                  ]}
-                >
-                  <Text style={[pitStyles.logTypeText, { color: getLogTypeColor(entry.type) }]}>
-                    {getLogTypeLabel(entry.type)}
-                  </Text>
-                </View>
-                <Text style={pitStyles.logText} numberOfLines={2}>
-                  {entry.text}
+            {log.length === 0 ? (
+              <View style={pitStyles.emptyState}>
+                <Text style={pitStyles.emptyTitle}>No Log Entries</Text>
+                <Text style={pitStyles.emptySub}>
+                  {isConnected ? "Events will be logged automatically" : "Connect to hub to start logging"}
                 </Text>
               </View>
-            ))}
+            ) : (
+              log.map((entry) => (
+                <View key={entry.id} style={pitStyles.logRow} testID={`pit-log-${entry.id}`}>
+                  <Text style={pitStyles.logTime}>{entry.timestamp}</Text>
+                  <View style={[pitStyles.logTypeBadge, { borderColor: getLogTypeColor(entry.type) + "44" }]}>
+                    <Text style={[pitStyles.logTypeText, { color: getLogTypeColor(entry.type) }]}>
+                      {getLogTypeLabel(entry.type)}
+                    </Text>
+                  </View>
+                  <Text style={pitStyles.logText} numberOfLines={2}>{entry.text}</Text>
+                </View>
+              ))
+            )}
           </View>
         </ScrollView>
       )}
+
+      <Modal visible={showConnectModal} transparent animationType="slide" onRequestClose={() => setShowConnectModal(false)} statusBarTranslucent>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={pitStyles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowConnectModal(false)} />
+          <View style={pitStyles.modalSheet}>
+            <View style={pitStyles.modalHandle} />
+            <Text style={pitStyles.modalTitle}>CONNECT TO HUB</Text>
+            <Text style={pitStyles.modalSub}>Enter the Hub WebSocket address. Default is the Hub AP address.</Text>
+            <TextInput
+              style={pitStyles.modalInput}
+              value={urlInput}
+              onChangeText={setUrlInput}
+              placeholder="ws://192.168.4.2:82"
+              placeholderTextColor="#2a2a2a"
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="hub-url-input"
+            />
+            <View style={pitStyles.modalBtns}>
+              <TouchableOpacity style={pitStyles.modalCancelBtn} onPress={() => setShowConnectModal(false)} activeOpacity={0.75}>
+                <Text style={pitStyles.modalCancelText}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={pitStyles.modalConnectBtn} onPress={handleConnect} activeOpacity={0.85} testID="hub-connect-confirm-btn">
+                <Text style={pitStyles.modalConnectText}>CONNECT</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -2626,28 +2653,48 @@ const pitStyles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#111",
-    gap: 10,
+    gap: 8,
   },
   connStatus: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6 },
   connDot: { width: 7, height: 7, borderRadius: 3.5 },
   connLabel: { fontSize: 9, fontWeight: "700", letterSpacing: 1.5 },
-  signalWrap: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
+  signalWrap: { flexDirection: "row", alignItems: "flex-end", gap: 5 },
   signalBars: { flexDirection: "row", alignItems: "flex-end", gap: 3 },
   signalBar: { width: 5, borderRadius: 1.5 },
   signalLabel: { fontSize: 8, fontWeight: "700", letterSpacing: 1 },
-  simBtn: {
+  headerBtns: { flexDirection: "row", gap: 6 },
+  headerBtn: {
     borderWidth: 1,
     borderColor: "#1e1e1e",
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 4,
   },
-  simBtnActive: {
-    borderColor: "#0a2a00",
-    backgroundColor: "rgba(52,199,89,0.06)",
+  headerBtnPrimary: { borderColor: "#2a2a2a", backgroundColor: "#111" },
+  headerBtnSim: { borderColor: "#2a1800", backgroundColor: "rgba(255,149,0,0.06)" },
+  headerBtnDanger: { borderColor: "#2a0a00", backgroundColor: "rgba(255,59,48,0.06)" },
+  headerBtnText: { fontSize: 9, fontWeight: "700", color: "#555", letterSpacing: 1 },
+  sessionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#070707",
+    borderBottomWidth: 1,
+    borderBottomColor: "#111",
+    paddingVertical: 9,
   },
-  simBtnText: { fontSize: 9, fontWeight: "700", color: "#333", letterSpacing: 1 },
-  simBtnTextActive: { color: "#34C759" },
+  sessionCell: { flex: 1, alignItems: "center", gap: 2 },
+  sessionFlagCell: { flex: 1.2, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 5 },
+  sessionDivider: { width: 1, height: 24, backgroundColor: "#111" },
+  sessionLabel: { fontSize: 8, fontWeight: "700", color: "#2a2a2a", letterSpacing: 1.5 },
+  sessionValue: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#CCC",
+    fontVariant: ["tabular-nums"] as const,
+    letterSpacing: -0.3,
+  },
+  flagDot: { width: 7, height: 7, borderRadius: 3.5 },
+  flagLabelText: { fontSize: 10, fontWeight: "700", letterSpacing: 1 },
   subTabBar: {
     flexDirection: "row",
     borderBottomWidth: 1,
@@ -2722,12 +2769,11 @@ const pitStyles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
   },
-  pttButtonActive: {
-    backgroundColor: "#FF1801",
-    borderColor: "#FF1801",
-  },
+  pttButtonActive: { backgroundColor: "#FF1801", borderColor: "#FF1801" },
+  pttButtonDisabled: { borderColor: "#111" },
   pttLabel: { fontSize: 9, fontWeight: "700", color: "#444", letterSpacing: 1.5 },
   pttLabelActive: { color: "#000" },
+  pttLabelDisabled: { color: "#1e1e1e" },
   pttHint: { fontSize: 11, color: "#2a2a2a", textAlign: "center", paddingHorizontal: 40 },
   voiceLog: {
     borderTopWidth: 1,
@@ -2735,24 +2781,17 @@ const pitStyles = StyleSheet.create({
     padding: 16,
     gap: 11,
   },
-  voiceLogTitle: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#2a2a2a",
-    letterSpacing: 1.5,
-    marginBottom: 2,
-  },
+  voiceLogTitle: { fontSize: 9, fontWeight: "700", color: "#2a2a2a", letterSpacing: 1.5, marginBottom: 2 },
+  emptySmall: { fontSize: 11, color: "#1e1e1e", textAlign: "center", paddingVertical: 8 },
   voiceRow: { flexDirection: "row", alignItems: "center", gap: 9 },
-  voiceTime: {
-    fontSize: 11,
-    color: "#2a2a2a",
-    fontVariant: ["tabular-nums"] as const,
-    width: 52,
-  },
+  voiceTime: { fontSize: 11, color: "#2a2a2a", fontVariant: ["tabular-nums"] as const, width: 52 },
   dirBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 },
   dirText: { fontSize: 9, fontWeight: "700", letterSpacing: 1 },
   voiceSender: { fontSize: 12, color: "#CCC", fontWeight: "500", flex: 1 },
   voiceDuration: { fontSize: 10, color: "#333" },
+  emptyState: { alignItems: "center", paddingTop: 60, paddingHorizontal: 40, gap: 10 },
+  emptyTitle: { fontSize: 14, fontWeight: "600", color: "#1e1e1e" },
+  emptySub: { fontSize: 12, color: "#1a1a1a", textAlign: "center", lineHeight: 18 },
   msgScroll: { flex: 1 },
   msgContent: { padding: 12, gap: 10, paddingBottom: 28 },
   msgCard: {
@@ -2762,14 +2801,8 @@ const pitStyles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
   },
-  msgCardUnread: {
-    borderColor: "#251000",
-    backgroundColor: "#0a0600",
-  },
-  msgCardCritical: {
-    borderColor: "#3a0800",
-    backgroundColor: "#0d0200",
-  },
+  msgCardUnread: { borderColor: "#251000", backgroundColor: "#0a0600" },
+  msgCardCritical: { borderColor: "#3a0800", backgroundColor: "#0d0200" },
   msgCardHeader: { flexDirection: "row" },
   priorityBar: { width: 3 },
   msgMeta: {
@@ -2783,11 +2816,7 @@ const pitStyles = StyleSheet.create({
   msgCategory: { fontSize: 9, fontWeight: "700", letterSpacing: 1.5, flex: 1 },
   msgMetaRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   msgSender: { fontSize: 10, color: "#444", fontWeight: "600" },
-  msgTime: {
-    fontSize: 10,
-    color: "#333",
-    fontVariant: ["tabular-nums"] as const,
-  },
+  msgTime: { fontSize: 10, color: "#333", fontVariant: ["tabular-nums"] as const },
   msgText: {
     fontSize: 14,
     color: "#555",
@@ -2797,12 +2826,7 @@ const pitStyles = StyleSheet.create({
     paddingBottom: 12,
   },
   msgTextUnread: { color: "#EEE", fontWeight: "500" },
-  msgFooter: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-  },
+  msgFooter: { flexDirection: "row", justifyContent: "flex-end", paddingHorizontal: 12, paddingBottom: 12 },
   ackedBadge: { flexDirection: "row", alignItems: "center", gap: 5 },
   ackedText: { fontSize: 9, fontWeight: "700", color: "#34C759", letterSpacing: 1 },
   ackBtn: {
@@ -2824,28 +2848,53 @@ const pitStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#0a0a0a",
   },
-  logTime: {
-    fontSize: 10,
-    color: "#2a2a2a",
-    fontVariant: ["tabular-nums"] as const,
-    width: 52,
-    paddingTop: 1,
-  },
-  logTypeBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 3,
-    marginTop: 1,
-  },
+  logTime: { fontSize: 10, color: "#2a2a2a", fontVariant: ["tabular-nums"] as const, width: 52, paddingTop: 1 },
+  logTypeBadge: { borderWidth: 1, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3, marginTop: 1 },
   logTypeText: { fontSize: 8, fontWeight: "700", letterSpacing: 1 },
-  logText: {
-    flex: 1,
-    fontSize: 12,
-    color: "#666",
-    lineHeight: 17,
-    letterSpacing: -0.1,
+  logText: { flex: 1, fontSize: 12, color: "#666", lineHeight: 17, letterSpacing: -0.1 },
+  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.75)" },
+  modalSheet: {
+    backgroundColor: "#080808",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    borderColor: "#1a1a1a",
+    padding: 20,
+    paddingBottom: 40,
+    gap: 14,
   },
+  modalHandle: { width: 36, height: 4, backgroundColor: "#222", borderRadius: 2, alignSelf: "center", marginBottom: 4 },
+  modalTitle: { fontSize: 11, fontWeight: "700", color: "#FFF", letterSpacing: 2 },
+  modalSub: { fontSize: 12, color: "#333", lineHeight: 18 },
+  modalInput: {
+    backgroundColor: "#0d0d0d",
+    borderWidth: 1,
+    borderColor: "#1e1e1e",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 14,
+    color: "#FFF",
+    letterSpacing: -0.2,
+  },
+  modalBtns: { flexDirection: "row", gap: 10, marginTop: 4 },
+  modalCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#1e1e1e",
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  modalCancelText: { fontSize: 12, fontWeight: "700", color: "#444", letterSpacing: 1 },
+  modalConnectBtn: {
+    flex: 2,
+    backgroundColor: "#FFF",
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  modalConnectText: { fontSize: 12, fontWeight: "700", color: "#000", letterSpacing: 1 },
 });
 
 const RACE_TABS: { id: RaceTab; label: string; short: string }[] = [
