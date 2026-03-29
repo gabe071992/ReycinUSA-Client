@@ -1075,7 +1075,7 @@ void updateMarshalRecord(const char* id, const StaticJsonDocument<768>& doc) {
 }
 
 void updateMarshalRecordByName(const char* id) {
-  StaticJsonDocument<2> dummy;
+  StaticJsonDocument<768> dummy;
   updateMarshalRecord(id, dummy);
 }
 
