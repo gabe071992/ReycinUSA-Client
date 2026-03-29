@@ -96,6 +96,38 @@ No serial peripherals required on the Hub. All I/O is through WiFi (PIT app + Dr
 
 ---
 
+## Required Libraries
+
+> **Critical:** The firmware uses the ArduinoJson **v6** API (`StaticJsonDocument`). Installing ArduinoJson v7 will produce deprecation warnings and the `createNestedObject` / `createNestedArray` calls will need to be updated. Pin the library to v6.x to compile without warnings.
+
+| Library | Author | Version | Install via | Notes |
+|---|---|---|---|---|
+| **esp32** (board package) | Espressif | **2.0.17** | Arduino IDE → Boards Manager | Use v2.x branch. v3.x removes `tcpip_adapter.h` which is required by `refreshClientRSSI()`. Do NOT use v3.x without replacing that call. |
+| **ArduinoJson** | Benoit Blanchon | **6.21.5** | Arduino IDE → Library Manager | Must be v6.x. v7 deprecates `StaticJsonDocument` and `createNestedObject`. |
+| **WebSockets** (arduinoWebSockets) | Markus Sattler | **2.4.1** | Arduino IDE → Library Manager | Provides `WebSocketsServer`. Search "WebSockets by Markus Sattler". |
+
+### Built-in (no install required — included with ESP32 board package)
+
+| Header | Provided by |
+|---|---|
+| `WiFi.h` | ESP32 Arduino Core |
+| `esp_now.h` | ESP32 Arduino Core |
+| `esp_wifi.h` | ESP32 Arduino Core |
+| `tcpip_adapter.h` | ESP32 Arduino Core v2.x only |
+| `EEPROM.h` | ESP32 Arduino Core |
+
+### Arduino IDE Board Manager URL
+
+Add this URL under **File → Preferences → Additional Boards Manager URLs**:
+
+```
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+```
+
+Then install: **esp32 by Espressif Systems — version 2.0.17**
+
+---
+
 ## Complete Arduino Firmware (.ino)
 
 ```cpp

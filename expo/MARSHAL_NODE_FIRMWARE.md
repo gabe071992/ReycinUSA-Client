@@ -86,6 +86,49 @@ GPIO 15     | Manual Flag Button   | INPUT_PULLUP, LOW = pressed
 
 ---
 
+## Required Libraries
+
+> **Critical:** The firmware uses the ArduinoJson **v6** API (`StaticJsonDocument`). Installing ArduinoJson v7 will produce deprecation warnings. Pin the library to v6.x to compile without warnings.
+
+| Library | Author | Version | Install via | Notes |
+|---|---|---|---|---|
+| **esp32** (board package) | Espressif | **2.0.17** | Arduino IDE → Boards Manager | Use v2.x branch. v3.x changes the ESP-NOW callback signature (`esp_now_recv_info_t*` replaces the MAC pointer parameter). The callback `onFrameReceived(const uint8_t* senderMAC, const uint8_t* data, int len)` compiles correctly on v2.x only. |
+| **ArduinoJson** | Benoit Blanchon | **6.21.5** | Arduino IDE → Library Manager | Must be v6.x. v7 deprecates `StaticJsonDocument` and `createNestedObject`. |
+
+### Built-in (no install required — included with ESP32 board package)
+
+| Header | Provided by |
+|---|---|
+| `WiFi.h` | ESP32 Arduino Core |
+| `esp_now.h` | ESP32 Arduino Core |
+| `esp_wifi.h` | ESP32 Arduino Core |
+| `HardwareSerial.h` | ESP32 Arduino Core |
+| `EEPROM.h` | ESP32 Arduino Core |
+
+### Arduino IDE Board Manager URL
+
+Add this URL under **File → Preferences → Additional Boards Manager URLs**:
+
+```
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+```
+
+Then install: **esp32 by Espressif Systems — version 2.0.17**
+
+### Version Compatibility Matrix
+
+| Component | Minimum | Recommended | Do NOT use |
+|---|---|---|---|
+| Arduino IDE | 2.0.0 | 2.3.x | 1.8.x (outdated ESP32 support) |
+| ESP32 Board Package | 2.0.14 | **2.0.17** | 3.x (breaks ESP-NOW callback + removes tcpip_adapter) |
+| ArduinoJson | 6.19.0 | **6.21.5** | 7.x (StaticJsonDocument removed) |
+| Board target | ESP32 Dev Module | ESP32 Dev Module | — |
+| CPU Frequency | 240 MHz | 240 MHz | 80 MHz (insufficient for mesh timing) |
+| Flash Size | 4MB | 4MB | — |
+| Partition Scheme | Default 4MB | Default 4MB | — |
+
+---
+
 ## Complete Arduino Firmware (.ino)
 
 ```cpp
