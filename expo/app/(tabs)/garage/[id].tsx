@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   View,
   Text,
@@ -61,6 +62,7 @@ function SectionPill({ section, active, onPress }: { section: typeof SECTIONS[0]
 export default function VehicleViewerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, updateVehicle, removeVehicle } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [activeSection, setActiveSection] = useState<Section>("overview");
   const [editModal, setEditModal] = useState<"details" | "engine" | null>(null);
@@ -586,7 +588,7 @@ export default function VehicleViewerScreen() {
         </ScrollView>
 
         <Modal visible={editModal === "details"} animationType="slide" presentationStyle="pageSheet">
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingTop: insets.top }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Details</Text>
               <TouchableOpacity onPress={() => setEditModal(null)}>
@@ -609,7 +611,7 @@ export default function VehicleViewerScreen() {
         </Modal>
 
         <Modal visible={editModal === "engine"} animationType="slide" presentationStyle="pageSheet">
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingTop: insets.top }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Engine Configuration</Text>
               <TouchableOpacity onPress={() => setEditModal(null)}>
@@ -635,7 +637,7 @@ export default function VehicleViewerScreen() {
         </Modal>
 
         <Modal visible={addModal === "repair"} animationType="slide" presentationStyle="pageSheet">
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingTop: insets.top }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Service Entry</Text>
               <TouchableOpacity onPress={() => setAddModal(null)}>
@@ -666,7 +668,7 @@ export default function VehicleViewerScreen() {
         </Modal>
 
         <Modal visible={addModal === "damage"} animationType="slide" presentationStyle="pageSheet">
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingTop: insets.top }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Damage Report</Text>
               <TouchableOpacity onPress={() => setAddModal(null)}>
@@ -703,7 +705,7 @@ export default function VehicleViewerScreen() {
         </Modal>
 
         <Modal visible={addModal === "booking"} animationType="slide" presentationStyle="pageSheet">
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingTop: insets.top }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Reservation</Text>
               <TouchableOpacity onPress={() => setAddModal(null)}>

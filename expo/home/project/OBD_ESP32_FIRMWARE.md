@@ -112,7 +112,7 @@ GND         | Ground            | Common ground
 #define GPS_SERIAL           Serial1
 
 // ─── Timing ──────────────────────────────────────────────────────────────────
-#define OBD_POLL_INTERVAL_MS 100   // 10Hz default
+int obdPollIntervalMs = 100;         // 10Hz default — runtime adjustable via set_poll_rate
 #define GPS_POLL_INTERVAL_MS 250   // 4Hz GPS
 #define MESH_TX_INTERVAL_MS  200   // 5Hz mesh broadcast
 #define OBD_INIT_TIMEOUT_MS  5000  // Give up OBD init after 5s
@@ -191,6 +191,32 @@ PIDDef pids[] = {
 const int pidCount = sizeof(pids) / sizeof(pids[0]);
 int currentPidIndex = 0;
 
+// ─── Phone GPS Fallback ───────────────────────────────────────────────────────
+// Declared here (before buildTelemetryDoc) so it is in scope when building frames.
+struct PhoneGPSData {
+  bool    valid;
+  float   latitude;
+  float   longitude;
+  float   altitude_m;
+  float   speed_kmh;
+  float   heading_deg;
+  unsigned long receivedAt;
+};
+PhoneGPSData phoneGps = { false, 0, 0, 0, 0, 0, 0 };
+
+#define PHONE_GPS_STALE_MS 3000
+
+bool phoneGpsValid() {
+  return phoneGps.valid && (millis() - phoneGps.receivedAt < PHONE_GPS_STALE_MS);
+}
+
+bool resolvedGpsValid()  { return gpsData.valid || phoneGpsValid(); }
+float resolvedLat()      { return gpsData.valid ? gpsData.latitude    : phoneGps.latitude;    }
+float resolvedLon()      { return gpsData.valid ? gpsData.longitude   : phoneGps.longitude;   }
+float resolvedAlt()      { return gpsData.valid ? gpsData.altitude_m  : phoneGps.altitude_m;  }
+float resolvedSpeed()    { return gpsData.valid ? gpsData.speed_kmh   : phoneGps.speed_kmh;   }
+float resolvedHeading()  { return gpsData.valid ? gpsData.heading_deg : phoneGps.heading_deg; }
+
 // ─── Connectivity ─────────────────────────────────────────────────────────────
 WebSocketsServer webSocket = WebSocketsServer(WEBSOCKET_PORT);
 bool             clientConnected = false;
@@ -252,8 +278,13 @@ void loop() {
   }
 
   // OBD poll — only if state is ACTIVE or CONNECTED_NO_DATA (to keep probing)
-  if (obdState != OBD_ABSENT && now - lastOBDPoll >= OBD_POLL_INTERVAL_MS) {
+  if (obdState != OBD_ABSENT && now - lastOBDPoll >= (unsigned long)obdPollIntervalMs) {
     pollOBDData();
+    lastOBDPoll = now;
+  } else if (obdState == OBD_ABSENT && clientConnected && now - lastOBDPoll >= 500UL) {
+    // When OBD is absent, still push GPS-only telemetry frames at 2Hz so the
+    // app receives position data during dev/test and phone GPS fallback works.
+    sendTelemetryToApp();
     lastOBDPoll = now;
   }
 
@@ -545,7 +576,7 @@ void parseGPGGA(const String& s) {
 // OBD fields are only included when their valid flag is true.
 // GPS fields are only included when gpsData.valid is true.
 // This allows the app and Hub to distinguish "sensor offline" from "sensor = 0".
-void buildTelemetryDoc(StaticJsonDocument<512>& doc) {
+void buildTelemetryDoc(JsonDocument& doc) {
   doc["type"]        = "telemetry";
   doc["node_type"]   = NODE_TYPE;
   doc["device_id"]   = getDeviceID();
@@ -555,7 +586,7 @@ void buildTelemetryDoc(StaticJsonDocument<512>& doc) {
 
   // GPS block — hardware GPS first, phone GPS fallback if hardware absent/invalid
   if (gpsData.valid) {
-    JsonObject gps    = doc.createNestedObject("gps");
+    JsonObject gps    = doc["gps"].to<JsonObject>();
     gps["lat"]        = gpsData.latitude;
     gps["lon"]        = gpsData.longitude;
     gps["alt_m"]      = gpsData.altitude_m;
@@ -565,19 +596,19 @@ void buildTelemetryDoc(StaticJsonDocument<512>& doc) {
     gps["utc"]        = gpsData.utc_time;
     gps["src"]        = "esp32";
   } else if (phoneGpsValid()) {
-    JsonObject gps    = doc.createNestedObject("gps");
+    JsonObject gps    = doc["gps"].to<JsonObject>();
     gps["lat"]        = phoneGps.latitude;
     gps["lon"]        = phoneGps.longitude;
     gps["alt_m"]      = phoneGps.altitude_m;
     gps["speed_kmh"]  = phoneGps.speed_kmh;
     gps["heading"]    = phoneGps.heading_deg;
-    gps["sats"]       = 0; // phone GPS, satellite count not available
+    gps["sats"]       = 0;
     gps["src"]        = "phone";
   }
 
   // OBD block — only include fields that are currently valid
   if (obdState == OBD_CONNECTED_ACTIVE) {
-    JsonObject obd = doc.createNestedObject("obd");
+    JsonObject obd = doc["obd"].to<JsonObject>();
     if (telemetry.rpm_valid)  obd["rpm"]          = telemetry.rpm;
     if (telemetry.ect_valid)  obd["ect_c"]        = telemetry.ect_c;
     if (telemetry.iat_valid)  obd["iat_c"]        = telemetry.iat_c;
@@ -591,9 +622,11 @@ void buildTelemetryDoc(StaticJsonDocument<512>& doc) {
   }
 }
 
-// Send full telemetry to connected mobile app (WebSocket)
+// Send full telemetry to connected mobile app (WebSocket).
+// Also called when OBD is absent but GPS is available so the app receives position data.
 void sendTelemetryToApp() {
-  StaticJsonDocument<512> doc;
+  if (!clientConnected) return;
+  JsonDocument doc;
   buildTelemetryDoc(doc);
   String json;
   serializeJson(doc, json);
@@ -603,7 +636,7 @@ void sendTelemetryToApp() {
 // Broadcast compact frame to mesh network via ESP-NOW
 // Kept under 250 bytes (ESP-NOW payload limit)
 void broadcastMeshTelemetry() {
-  StaticJsonDocument<250> doc;
+  JsonDocument doc;
   doc["t"]    = "veh";
   doc["id"]   = getDeviceID();
   doc["ms"]   = millis();
@@ -646,7 +679,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
       Serial.printf("[WS] Client %u connected\n", num);
       clientConnected = true;
 
-      StaticJsonDocument<256> doc;
+      JsonDocument doc;
       doc["type"]        = "connected";
       doc["version"]     = FIRMWARE_VERSION;
       doc["node_type"]   = NODE_TYPE;
@@ -668,44 +701,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
   }
 }
 
-// ─── Phone GPS Fallback ───────────────────────────────────────────────────────
-// When the ESP32's onboard GPS module is absent or has no fix, the connected
-// mobile app sends its own device GPS via the "gps_update" command.
-// This data is stored and used exactly like hardware GPS in telemetry frames.
-// The vehicle node connects to ONLY ONE phone (first WebSocket client).
-// That phone is responsible for sending gps_update when hardware GPS is absent.
-
-struct PhoneGPSData {
-  bool    valid;
-  float   latitude;
-  float   longitude;
-  float   altitude_m;
-  float   speed_kmh;
-  float   heading_deg;
-  unsigned long receivedAt; // millis() when last received
-};
-PhoneGPSData phoneGps = { false, 0, 0, 0, 0, 0, 0 };
-
-#define PHONE_GPS_STALE_MS 3000 // Treat phone GPS as stale after 3s without update
-
-// Returns true if phone GPS is valid and not stale
-bool phoneGpsValid() {
-  return phoneGps.valid && (millis() - phoneGps.receivedAt < PHONE_GPS_STALE_MS);
-}
-
-// Resolved GPS: hardware GPS if valid, else phone GPS if valid, else nothing
-bool resolvedGpsValid() {
-  return gpsData.valid || phoneGpsValid();
-}
-
-float resolvedLat()     { return gpsData.valid ? gpsData.latitude     : phoneGps.latitude;    }
-float resolvedLon()     { return gpsData.valid ? gpsData.longitude    : phoneGps.longitude;   }
-float resolvedAlt()     { return gpsData.valid ? gpsData.altitude_m   : phoneGps.altitude_m;  }
-float resolvedSpeed()   { return gpsData.valid ? gpsData.speed_kmh    : phoneGps.speed_kmh;   }
-float resolvedHeading() { return gpsData.valid ? gpsData.heading_deg  : phoneGps.heading_deg; }
-
 void handleAppCommand(uint8_t num, const String& message) {
-  StaticJsonDocument<256> doc;
+  JsonDocument doc;
   if (deserializeJson(doc, message) != DeserializationError::Ok) return;
 
   String cmd = doc["command"] | "";
@@ -717,7 +714,7 @@ void handleAppCommand(uint8_t num, const String& message) {
   } else if (cmd == "set_poll_rate") {
     int rate = doc["rate"] | 10;
     if (rate >= 1 && rate <= 20) {
-      OBD_POLL_INTERVAL_MS = 1000 / rate; // Not const — runtime adjustable
+      obdPollIntervalMs = 1000 / rate;
     }
   } else if (cmd == "actuate") {
     String control = doc["control"] | "";
@@ -748,7 +745,7 @@ void handleAppCommand(uint8_t num, const String& message) {
 }
 
 void replyOK(uint8_t num, const char* event) {
-  StaticJsonDocument<128> doc;
+  JsonDocument doc;
   doc["type"]    = event;
   doc["success"] = true;
   String json;
@@ -757,7 +754,7 @@ void replyOK(uint8_t num, const char* event) {
 }
 
 void sendStatusToApp(uint8_t num) {
-  StaticJsonDocument<256> doc;
+  JsonDocument doc;
   doc["type"]       = "status";
   doc["version"]    = FIRMWARE_VERSION;
   doc["device_id"]  = getDeviceID();
@@ -775,9 +772,9 @@ void sendStatusToApp(uint8_t num) {
 //  OBD COMMANDS (App-facing)
 // ─────────────────────────────────────────────────────────────────────────────
 void getDTCCodes(uint8_t num) {
-  StaticJsonDocument<512> doc;
+  JsonDocument doc;
   doc["type"] = "dtc_codes";
-  JsonArray codes = doc.createNestedArray("codes");
+  JsonArray codes = doc["codes"].to<JsonArray>();
 
   if (obdState == OBD_ABSENT) {
     doc["error"] = "OBD not connected";
@@ -800,7 +797,7 @@ void getDTCCodes(uint8_t num) {
 }
 
 void clearDTCCodes(uint8_t num) {
-  StaticJsonDocument<128> doc;
+  JsonDocument doc;
   doc["type"] = "dtc_cleared";
   if (obdState == OBD_ABSENT) {
     doc["success"] = false;
@@ -815,7 +812,7 @@ void clearDTCCodes(uint8_t num) {
 }
 
 void actuateControl(uint8_t num, const String& control, bool state) {
-  StaticJsonDocument<128> doc;
+  JsonDocument doc;
   doc["type"]    = "actuate_result";
   doc["control"] = control;
   doc["state"]   = state;
@@ -844,7 +841,7 @@ void actuateControl(uint8_t num, const String& control, bool state) {
 
 void sendRawToApp(uint8_t num, const String& cmd) {
   String resp = sendOBDCmdWithResponse(cmd.c_str(), 2000);
-  StaticJsonDocument<256> doc;
+  JsonDocument doc;
   doc["type"]     = "raw_response";
   doc["command"]  = cmd;
   doc["response"] = (obdState == OBD_ABSENT) ? "ERROR: OBD ABSENT" : resp;

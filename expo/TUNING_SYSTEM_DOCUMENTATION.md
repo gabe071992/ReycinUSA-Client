@@ -1,8 +1,8 @@
 # Reycin Tuning Console — System Documentation
 
-**Version:** 1.0.0  
+**Version:** 2.0.0  
 **Platform:** Reycin USA Mobile App  
-**Firmware Target:** Reycin OBD II ESP32 v1.0.0  
+**Firmware Target:** Reycin OBD II ESP32 v2.0.0  
 **Vehicle Target:** Reycin F300 / GTR250R Engine Configuration  
 
 ---
@@ -11,20 +11,23 @@
 
 1. [System Overview](#1-system-overview)
 2. [Connection Architecture](#2-connection-architecture)
-3. [Sensor Inventory](#3-sensor-inventory)
-4. [Required Sensors — Base Operation](#4-required-sensors--base-operation)
-5. [Required Sensors — Performance Operation](#5-required-sensors--performance-operation)
-6. [Optional Sensors — Extended Suite](#6-optional-sensors--extended-suite)
-7. [Actuator Controls](#7-actuator-controls)
-8. [Fuel System Analysis](#8-fuel-system-analysis)
-9. [Thermal Management](#9-thermal-management)
-10. [Diagnostics & Fault Codes](#10-diagnostics--fault-codes)
-11. [Raw OBD Console](#11-raw-obd-console)
-12. [Poll Rate Configuration](#12-poll-rate-configuration)
-13. [GTR250R Engine Notes](#13-gtr250r-engine-notes)
-14. [Expansion & Future Sensors](#14-expansion--future-sensors)
-15. [OBD Mode Reference](#15-obd-mode-reference)
-16. [Safety Protocols](#16-safety-protocols)
+3. [GPS System](#3-gps-system)
+4. [OBD State Machine](#4-obd-state-machine)
+5. [Mesh Network & Hub Architecture](#5-mesh-network--hub-architecture)
+6. [Sensor Inventory](#6-sensor-inventory)
+7. [Required Sensors — Base Operation](#7-required-sensors--base-operation)
+8. [Required Sensors — Performance Operation](#8-required-sensors--performance-operation)
+9. [Optional Sensors — Extended Suite](#9-optional-sensors--extended-suite)
+10. [Actuator Controls](#10-actuator-controls)
+11. [Fuel System Analysis](#11-fuel-system-analysis)
+12. [Thermal Management](#12-thermal-management)
+13. [Diagnostics & Fault Codes](#13-diagnostics--fault-codes)
+14. [Raw OBD Console](#14-raw-obd-console)
+15. [Poll Rate Configuration](#15-poll-rate-configuration)
+16. [GTR250R Engine Notes](#16-gtr250r-engine-notes)
+17. [Expansion & Future Sensors](#17-expansion--future-sensors)
+18. [OBD Mode Reference](#18-obd-mode-reference)
+19. [Safety Protocols & Data Logging](#19-safety-protocols--data-logging)
 
 ---
 
@@ -40,45 +43,101 @@ Reycin Mobile App
       │  WebSocket (ws://192.168.4.1:81)
       │  JSON command/response protocol
       │
-ESP32-WROOM-32 (Reycin OBD Adapter)
+ESP32-WROOM-32 (Reycin VEH Node)
       │
-      │  UART Serial (38400 baud)
+      │  UART Serial (38400 baud) — OBD II
+      │  UART Serial1           — GPS Module (NEO-6M / NEO-M8N)
       │
-ELM327 / STN1110 OBD II Chip
-      │
-      │  OBD II Protocols (CAN, KWP2000, ISO 9141-2, J1850)
-      │
-Vehicle ECU
+ELM327 / STN1110 OBD II Chip        GPS Module
+      │                                    │
+      │  OBD II Protocols                  │  NMEA at 9600 baud
+      │  (CAN, KWP2000, ISO 9141-2, J1850) │
+      │                                    │
+Vehicle ECU                         Position / Speed / Heading
 ```
 
-### Command Protocol
+### Command Protocol (v2.0.0)
 
 All commands are JSON objects. The `command` field is the primary dispatcher.
 
 **From App → ESP32:**
+
+| Command | Fields | Purpose |
+|---|---|---|
+| `get_dtc` | — | Trigger Mode 03 DTC scan |
+| `clear_dtc` | — | Mode 04 DTC clear + MIL reset |
+| `set_poll_rate` | `rate` (int, 1–20) | Set OBD poll rate in Hz |
+| `actuate` | `control` (string), `state` (bool) | Actuator override |
+| `raw_obd` | `cmd` (string) | Pass-through raw OBD command to ELM327 |
+| `gps_update` | `lat`, `lon`, `speed_kmh`, `heading`, `alt_m` | Phone GPS fallback injection |
+| `start_session` | — | Mark session active for mesh broadcast |
+| `stop_session` | — | Mark session inactive |
+| `get_status` | — | Request full node status response |
+
 ```json
 { "command": "get_dtc" }
-{ "command": "clear_dtc" }
 { "command": "set_poll_rate", "rate": 10 }
 { "command": "actuate", "control": "fan_main", "state": true }
-{ "command": "raw_obd", "cmd": "010C" }
+{ "command": "gps_update", "lat": 37.4219, "lon": -122.0840, "speed_kmh": 62.1, "heading": 270, "alt_m": 15 }
+{ "command": "start_session" }
+{ "command": "get_status" }
 ```
 
-**From ESP32 → App (Telemetry push, every complete PID cycle):**
+**From ESP32 → App (Telemetry push — v2.0.0 nested frame format):**
+
 ```json
 {
   "type": "telemetry",
-  "rpm": 3200,
-  "ect_c": 85,
-  "iat_c": 28,
-  "map_kpa": 98,
-  "vbat": 13.8,
-  "throttle_pct": 45,
-  "engine_load": 62,
-  "stft": -2.3,
-  "ltft": 1.5,
-  "o2_voltage": 0.45,
-  "timestamp": 123456789
+  "node_type": "vehicle",
+  "device_id": "A3F921",
+  "obd_state": "active",
+  "session": true,
+  "timestamp": 123456789,
+  "gps": {
+    "lat": 37.4219,
+    "lon": -122.0840,
+    "speed_kmh": 62.1,
+    "heading": 270,
+    "alt_m": 15,
+    "sats": 8,
+    "utc": "12:34:05",
+    "src": "esp32"
+  },
+  "obd": {
+    "rpm": 3200,
+    "ect_c": 85,
+    "iat_c": 28,
+    "map_kpa": 98,
+    "vbat": 13.8,
+    "throttle_pct": 45,
+    "engine_load": 62,
+    "stft": -2.3,
+    "ltft": 1.5,
+    "o2_voltage": 0.45
+  }
+}
+```
+
+> **App compatibility note:** `OBDProvider.tsx` reads OBD fields from `msg.obd ?? msg`. If `msg.obd` is present (v2.0.0+), the nested block is used. If absent, the parser falls back to flat top-level fields (legacy v1.0.0 firmware). Both formats are supported simultaneously.
+
+**From ESP32 → App (Connection confirmed):**
+```json
+{
+  "type": "connected",
+  "version": "2.0.0",
+  "gps_present": true,
+  "obd_state": "active"
+}
+```
+
+**From ESP32 → App (Status response to `get_status`):**
+```json
+{
+  "type": "status",
+  "obd_state": "active",
+  "gps_valid": true,
+  "gps_sats": 8,
+  "session": false
 }
 ```
 
@@ -89,11 +148,13 @@ All commands are JSON objects. The `command` field is the primary dispatcher.
 | Parameter | Value |
 |---|---|
 | Transport | WebSocket |
-| Address | ws://192.168.4.1:81 |
-| WiFi SSID | `Reycin_OBD_XXXXXX` (device-specific) |
+| Address | `ws://192.168.4.1:81` |
+| WiFi SSID | `Reycin_VEH_XXXXXX` (device-specific suffix from MAC) |
 | WiFi Password | `reycin123` (change in production) |
 | Protocol | JSON over WebSocket text frames |
 | Auto-reconnect | 3 second retry |
+
+> **Note:** The SSID prefix is `Reycin_VEH_`, not `Reycin_OBD_`. This changed in v2.0.0 when the device role was renamed from OBD adapter to Vehicle Node to reflect the expanded GPS + mesh capability.
 
 ### Connection States
 
@@ -101,12 +162,148 @@ All commands are JSON objects. The `command` field is the primary dispatcher.
 |---|---|
 | `disconnected` | No active WebSocket session |
 | `connecting` | WebSocket handshake in progress |
-| `connected` | Active session, telemetry flowing |
-| `error` | Connection failed, reconnect scheduled |
+| `connected` | Active session — telemetry and status frames flowing |
+| `error` | Connection failed; reconnect scheduled in 3 seconds |
+
+### Connection Sequence
+
+1. App calls `connect("wifi")` → opens WebSocket to `ws://192.168.4.1:81`
+2. On `onopen`, app immediately sends `{ command: "get_status" }` (500ms delay)
+3. Firmware responds with `type: "status"` carrying `obd_state` and `gps_valid`
+4. Firmware begins pushing `type: "telemetry"` frames at the configured poll rate
+5. App starts phone GPS watcher in parallel (see Section 3)
 
 ---
 
-## 3. Sensor Inventory
+## 3. GPS System
+
+### Hardware GPS (Primary Source)
+
+The Vehicle Node firmware v2.0.0 supports a hardware GPS module (NEO-6M or NEO-M8N) connected via UART Serial1. When a valid fix is obtained:
+
+- GPS data is included in every telemetry frame under the `gps{}` nested object
+- `gps.src` is `"esp32"`
+- The Digital Dash displays an `ESP32` GPS source badge
+
+**GPS object fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `lat` | float | Latitude (decimal degrees, WGS84) |
+| `lon` | float | Longitude (decimal degrees, WGS84) |
+| `speed_kmh` | float | Speed over ground in km/h |
+| `heading` | float | True heading in degrees (0–360) |
+| `alt_m` | float | Altitude in metres |
+| `sats` | int | Number of satellites used in fix |
+| `utc` | string | UTC time string from GPS `GPRMC` sentence |
+| `src` | string | `"esp32"` or `"phone"` |
+
+### Phone GPS Fallback
+
+When the hardware GPS module is absent or has no fix, the app activates its own GPS using `expo-location`:
+
+1. `OBDProvider` calls `Location.watchPositionAsync` with `BestForNavigation` accuracy at 1 second / 2 metre intervals immediately on WebSocket connection
+2. On each phone GPS update, the app sends a `gps_update` command to the firmware, injecting the phone coordinates into the Vehicle Node's internal GPS state
+3. The firmware includes the injected position in all subsequent mesh broadcasts with `gps_src: "phone"`
+4. The `gps{}` object in telemetry frames then carries `src: "phone"`
+5. The Digital Dash displays a `PHONE` GPS source badge
+6. `OBDProvider` tracks source in `gpsSource` state: `"esp32"` | `"phone"` | `null`
+
+### GPS When OBD is Absent
+
+When `obd_state == "absent"`, the firmware does not call `sendTelemetryToApp()`, so no WebSocket frames are pushed to the app. The phone GPS watcher continues running independently — `OBDProvider` reads `phoneLocationRef.current` directly rather than waiting for a telemetry frame. GPS position therefore remains available on the Digital Dash even with no OBD connection.
+
+> **Firmware improvement pending:** The Vehicle Node should be updated to push GPS-only telemetry frames (with `obd` block omitted) even when `obd_state == "absent"`, to allow real-time position relay through the mesh when the ELM327 is not connected.
+
+---
+
+## 4. OBD State Machine
+
+Firmware v2.0.0 introduces a three-state OBD detection machine. The state is reported on every telemetry frame and status response in the `obd_state` field.
+
+| State | `obd_state` value | Meaning |
+|---|---|---|
+| `OBD_ABSENT` | `"absent"` | ELM327 not detected on UART. OBD fields are omitted entirely from telemetry. Firmware does not call `sendTelemetryToApp()`. |
+| `OBD_CONNECTED_NO_DATA` | `"no_data"` | ELM327 detected, but vehicle not responding to PID queries. OBD fields present but may be zero. |
+| `OBD_CONNECTED_ACTIVE` | `"active"` | Full OBD telemetry flowing. All configured PIDs responding. |
+
+### App Behavior Per State
+
+| State | Tuning Console | Digital Dash |
+|---|---|---|
+| `absent` | Badge: `OBD ABSENT` — sensor values show `—` | OBD fields blank; GPS may still show if phone GPS active |
+| `no_data` | Badge: `NO DATA` — sensor values show `—` | OBD fields blank |
+| `active` | Normal live values | Full telemetry display |
+
+### Hub Behavior Per State
+
+The Hub Node (`HUB_NODE_FIRMWARE.md`) tracks `obdState` per vehicle in `VehicleState`. When pushing telemetry to PIT Manager clients via `pushTelemetryToPIT()`, OBD fields are only included when `obdState == 2` (`OBD_CONNECTED_ACTIVE`). GPS fields are always included regardless of OBD state.
+
+---
+
+## 5. Mesh Network & Hub Architecture
+
+The Vehicle Node does not communicate directly with the PIT Manager app. During a race session, all vehicle telemetry flows through the ESP-NOW mesh to the Hub Node, which then serves it to connected apps over WebSocket.
+
+### Network Topology
+
+```
+Vehicle Node (ws://192.168.4.1:81)
+      │  ESP-NOW broadcast
+      ▼
+Marshal Node(s)
+      │  ESP-NOW relay
+      ▼
+Hub Node (WiFi AP)
+      │  ws://192.168.5.1:82
+      ├── Driver App  (role: "driver")   — Phone mounted in car
+      └── PIT Manager (role: "pit")      — Tablet in pit lane
+```
+
+### Hub Node Connection (PITProvider / Driver App)
+
+The Driver app connects to the Hub Node via `PITProvider.tsx`:
+
+- **Default URL:** `ws://192.168.4.2:82` (configurable in Race tab connection screen)
+- **Port:** 82 (distinct from the Vehicle Node port 81)
+- **Auto-reconnect:** 4 second retry on disconnect
+
+**Role Registration Handshake (required — Hub v2.0.0):**
+
+On WebSocket open, the client must immediately send a registration frame:
+```json
+{ "type": "register", "role": "driver" }
+```
+The Hub stores the role and routes messages accordingly. Messages sent before registration is complete will be rejected. The PIT Manager app sends `{ "type": "register", "role": "pit" }`.
+
+> If registration is skipped or the wrong `type` is used, the Hub logs `"unknown type"` and the client receives no routed messages. This was the cause of a live protocol mismatch in pre-v2.0.0 app builds where `"driver_ready"` was sent instead of `"register"` — corrected in app v2.0.0.
+
+### Compact Mesh Frame Format
+
+Vehicle Nodes broadcast telemetry over ESP-NOW using a compact JSON format constrained to 250 bytes (ESP-NOW frame limit). Field names are abbreviated:
+
+| Short Key | Full Meaning | Type |
+|---|---|---|
+| `t` | Frame type (`"v"` = vehicle) | string |
+| `id` | Device ID (MAC suffix) | string |
+| `ms` | Uptime milliseconds | uint32 |
+| `sess` | Session active flag | bool |
+| `lat` | Latitude | float |
+| `lon` | Longitude | float |
+| `spd` | Speed km/h | float |
+| `hdg` | Heading degrees | float |
+| `gsrc` | GPS source (`"esp32"` / `"phone"`) | string |
+| `rpm` | Engine RPM | int |
+| `tps` | Throttle position % | int |
+| `ect` | Coolant temp °C | int |
+| `vbat` | Battery voltage V | float |
+| `obd` | OBD state code (0=absent, 1=no_data, 2=active) | int |
+
+The Hub unpacks these short keys back into full `VehicleState` fields before distributing to PIT clients.
+
+---
+
+## 6. Sensor Inventory
 
 ### Tier Classification
 
@@ -123,17 +320,17 @@ All commands are JSON objects. The `command` field is the primary dispatcher.
 | `normal` | Green `#34C759` | Value within normal operating range |
 | `warning` | Yellow `#FFD600` | Value approaching limit — monitor closely |
 | `critical` | Red `#FF1801` | Value outside safe range — immediate attention |
-| `offline` | Gray `#333` | Sensor not connected or disabled |
+| `offline` | Gray `#333` | Sensor not connected, disabled, or `obd_state != "active"` |
 
 ---
 
-## 4. Required Sensors — Base Operation
+## 7. Required Sensors — Base Operation
 
 These sensors are **always active** and cannot be disabled. They represent the minimum sensor suite for safe vehicle operation.
 
 ---
 
-### 4.1 RPM — Engine Speed
+### 7.1 RPM — Engine Speed
 
 | Property | Value |
 |---|---|
@@ -160,7 +357,7 @@ These sensors are **always active** and cannot be disabled. They represent the m
 
 ---
 
-### 4.2 ECT — Engine Coolant Temperature
+### 7.2 ECT — Engine Coolant Temperature
 
 | Property | Value |
 |---|---|
@@ -186,12 +383,12 @@ These sensors are **always active** and cannot be disabled. They represent the m
 
 **Notes:**
 - The Thermal tab displays a zone bar (Cold / Normal / Warning / Critical) with live needle
-- Cooling fan override (fan_main) can be triggered manually from Thermal tab
+- Cooling fan override (`fan_main`) can be triggered manually from the Thermal tab
 - ECT is critical for closed-loop fuel management — sensor failure will force open-loop operation
 
 ---
 
-### 4.3 TPS — Throttle Position Sensor
+### 7.3 TPS — Throttle Position Sensor
 
 | Property | Value |
 |---|---|
@@ -217,7 +414,7 @@ These sensors are **always active** and cannot be disabled. They represent the m
 
 ---
 
-### 4.4 VBAT — Battery / Charging Voltage
+### 7.4 VBAT — Battery / Charging Voltage
 
 | Property | Value |
 |---|---|
@@ -244,13 +441,13 @@ These sensors are **always active** and cannot be disabled. They represent the m
 
 ---
 
-## 5. Required Sensors — Performance Operation
+## 8. Required Sensors — Performance Operation
 
 These sensors are required for full engine management and performance monitoring. They are always active and cannot be disabled.
 
 ---
 
-### 5.1 MAP — Manifold Absolute Pressure
+### 8.1 MAP — Manifold Absolute Pressure
 
 | Property | Value |
 |---|---|
@@ -277,7 +474,7 @@ These sensors are required for full engine management and performance monitoring
 
 ---
 
-### 5.2 ENGINE LOAD — Calculated Engine Load
+### 8.2 ENGINE LOAD — Calculated Engine Load
 
 | Property | Value |
 |---|---|
@@ -301,13 +498,13 @@ These sensors are required for full engine management and performance monitoring
 
 ---
 
-## 6. Optional Sensors — Extended Suite
+## 9. Optional Sensors — Extended Suite
 
 These sensors can be toggled ON/OFF by the user in the Sensors tab depending on which sensors are physically installed. When toggled off, values are hidden from all tuning views but the ECU still reports them if available.
 
 ---
 
-### 6.1 IAT — Intake Air Temperature
+### 9.1 IAT — Intake Air Temperature
 
 | Property | Value |
 |---|---|
@@ -337,7 +534,7 @@ These sensors can be toggled ON/OFF by the user in the Sensors tab depending on 
 
 ---
 
-### 6.2 STFT — Short Term Fuel Trim
+### 9.2 STFT — Short Term Fuel Trim
 
 | Property | Value |
 |---|---|
@@ -362,14 +559,9 @@ These sensors can be toggled ON/OFF by the user in the Sensors tab depending on 
 **Hardware Requirement:** Functioning O2 sensor (wideband or narrowband)  
 **Dependency:** Requires closed-loop fuel control in ECU
 
-**Notes:**
-- STFT reflects immediate corrections the ECU is making to reach stoichiometry
-- Large STFT values indicate the ECU is working hard to correct a fueling error
-- STFT should return toward 0% in steady-state driving
-
 ---
 
-### 6.3 LTFT — Long Term Fuel Trim
+### 9.3 LTFT — Long Term Fuel Trim
 
 | Property | Value |
 |---|---|
@@ -391,9 +583,6 @@ These sensors can be toggled ON/OFF by the user in the Sensors tab depending on 
 | +5% to +10% | Mild lean condition — investigate intake leaks, MAF calibration |
 | ±15%+ | Significant fueling fault — service required |
 
-**Hardware Requirement:** Same as STFT  
-**Dependency:** Requires multiple warm drive cycles to build meaningful data
-
 **Notes:**
 - LTFT is the ECU's learned correction — it represents accumulated fuel bias
 - A large positive LTFT indicates the ECU has learned the engine is consistently lean
@@ -401,7 +590,7 @@ These sensors can be toggled ON/OFF by the user in the Sensors tab depending on 
 
 ---
 
-### 6.4 O2 — Oxygen Sensor Voltage (Bank 1, Sensor 1)
+### 9.4 O2 — Oxygen Sensor Voltage (Bank 1, Sensor 1)
 
 | Property | Value |
 |---|---|
@@ -429,12 +618,11 @@ These sensors can be toggled ON/OFF by the user in the Sensors tab depending on 
 - Lambda (λ) = O2 voltage / 0.45 (approximate, narrowband)
 - AFR = λ × 14.7 (for gasoline)
 
-**Hardware Requirement:** Narrowband or wideband O2 sensor in exhaust manifold/downpipe  
 **Note:** PID `0114` returns narrowband voltage. Wideband sensors require custom CAN mapping.
 
 ---
 
-## 7. Actuator Controls
+## 10. Actuator Controls
 
 Actuator commands are issued via **OBD Mode 08** (Request Control of On-Board System). All commands are routed through the ESP32 firmware's `actuateControl()` function.
 
@@ -443,7 +631,7 @@ Actuator commands directly activate physical components. Only issue these comman
 
 ---
 
-### 7.1 fan_main — Main Cooling Fan
+### 10.1 fan_main — Main Cooling Fan
 
 | Property | Value |
 |---|---|
@@ -460,7 +648,7 @@ Actuator commands directly activate physical components. Only issue these comman
 
 ---
 
-### 7.2 pump_aux — Auxiliary Pump
+### 10.2 pump_aux — Auxiliary Pump
 
 | Property | Value |
 |---|---|
@@ -479,9 +667,7 @@ Actuator commands directly activate physical components. Only issue these comman
 
 ---
 
-### 7.3 Expansion Slots (Reserved)
-
-The following Mode 08 command pairs are reserved for future actuator mapping:
+### 10.3 Expansion Slots (Reserved)
 
 | Slot | ON | OFF | Assigned |
 |---|---|---|---|
@@ -489,24 +675,22 @@ The following Mode 08 command pairs are reserved for future actuator mapping:
 | Slot 4 | `0807` | `0806` | Unassigned |
 | Slot 5 | `0809` | `0808` | Unassigned |
 
-Future firmware releases will expose additional control IDs for these slots as hardware definitions are finalized.
-
 ---
 
-## 8. Fuel System Analysis
+## 11. Fuel System Analysis
 
 The Fuel tab provides consolidated analysis of fuel delivery and combustion quality.
 
 ### AFR / Lambda Calculation
 
-The app derives approximate AFR from the O2 sensor voltage using the formula:
+The app derives approximate AFR from the O2 sensor voltage:
 
 ```
 λ (lambda) = O2_voltage / 0.45
 AFR        = λ × 14.7   (for gasoline, stoichiometric ratio)
 ```
 
-This is an approximation using a narrowband O2 sensor mid-point (0.45V ≈ λ=1.0). For accurate wideband AFR measurements, a standalone wideband controller with CAN output is required.
+This is an approximation using a narrowband O2 sensor mid-point (0.45V ≈ λ=1.0).
 
 ### Fuel Trim Combined Analysis
 
@@ -517,18 +701,26 @@ If total > +15% → lean condition (air leak, MAF fault, low fuel pressure)
 If total < -15% → rich condition (injector leak, MAP sensor fault, high fuel pressure)
 ```
 
+### Fuel Loop Status Field
+
+The Fuel tab displays a **LOOP STATUS** field sourced from `telemetry.fuel_status`. This field maps to OBD PID `0103` (Fuel System Status).
+
+> **Status: Not yet implemented in firmware.** PID `0103` is not in the Vehicle Node v2.0.0 polling list. The `fuel_status` field will always be `undefined` and display as `—` until the firmware polling list is updated to include PID `0103`. This is a pending firmware addition.
+
 ---
 
-## 9. Thermal Management
+## 12. Thermal Management
 
 ### Temperature Threshold Configuration
 
-Thresholds are stored in local app state and do not modify ECU parameters. They control visual alert states only.
+Thresholds control visual alert states only. They do not modify ECU protection parameters.
 
 | Threshold | Default | Min | Max | Purpose |
 |---|---|---|---|---|
 | ECT Warning | 105°C | 80°C | Critical-1 | Yellow alert trigger |
 | ECT Critical | 115°C | Warning+1 | 130°C | Red alert trigger |
+
+**Persistence:** ECT thresholds are saved to `AsyncStorage` under keys `tuning_ect_warn` and `tuning_ect_crit`. Values persist across app restarts and tab navigation. Defaults (105°C / 115°C) are used if no saved value exists.
 
 ### Thermal Zone Bar
 
@@ -543,7 +735,7 @@ A live needle moves across this bar based on the current ECT reading.
 
 ---
 
-## 10. Diagnostics & Fault Codes
+## 13. Diagnostics & Fault Codes
 
 ### DTC Scan — Protocol
 
@@ -580,7 +772,7 @@ Sending `{ "command": "clear_dtc" }` triggers OBD Mode 04 (`04`). This:
 
 ---
 
-## 11. Raw OBD Console
+## 14. Raw OBD Console
 
 The Console tab provides direct access to the OBD II communication layer. Commands are forwarded to the ESP32 which sends them directly to the ELM327 chip.
 
@@ -610,7 +802,7 @@ Example: `010C` → `41 0C 0D 02` → RPM = ((0x0D × 256) + 0x02) / 4 = 833 rpm
 
 ---
 
-## 12. Poll Rate Configuration
+## 15. Poll Rate Configuration
 
 The firmware polls OBD PIDs in a round-robin sequence at a configurable rate.
 
@@ -622,8 +814,7 @@ The firmware polls OBD PIDs in a round-robin sequence at a configurable rate.
 | 15 Hz | 67ms | Track use, high-speed logging |
 | 20 Hz | 50ms | Maximum rate — high CPU load |
 
-**Firmware Limit:** 20 Hz maximum per firmware spec (`pollInterval = 1000 / rate`).  
-**Practical Note:** At higher poll rates with many PIDs enabled, individual PID update frequency decreases as each PID takes one slot in the round-robin cycle.
+**Firmware Note:** The `set_poll_rate` command handler in v2.0.0 must use an `int` variable (`int obdPollIntervalMs = 100;`) rather than a preprocessor `#define`. Assigning to `#define OBD_POLL_INTERVAL_MS` at runtime is a compile error in C — the firmware must declare `obdPollIntervalMs` as a mutable variable and assign `obdPollIntervalMs = 1000 / rate` in the command handler. This is a required firmware fix before `set_poll_rate` will compile and function.
 
 ```
 Effective per-PID rate = Total poll rate / Number of active PIDs
@@ -634,7 +825,7 @@ Example: 4 PIDs at 10 Hz → each PID updates at ~2.5 Hz
 
 ---
 
-## 13. GTR250R Engine Notes
+## 16. GTR250R Engine Notes
 
 The Reycin F300 is sold without an engine. The **GTR250R** is the Reycin-recommended powerplant.
 
@@ -658,13 +849,14 @@ The Reycin F300 is sold without an engine. The **GTR250R** is the Reycin-recomme
 
 ---
 
-## 14. Expansion & Future Sensors
+## 17. Expansion & Future Sensors
 
 The following sensors are planned for future firmware and tuning console integration:
 
 | Sensor | PID | Description | Tier |
 |---|---|---|---|
 | MAF | `0110` | Mass Air Flow Rate (g/s) | Performance |
+| Fuel System Status | `0103` | Open/closed loop status — currently unimplemented | Performance |
 | Fuel Rail Pressure | `0123` | Absolute fuel rail pressure | Expanded |
 | EGR Commanded | `012C` | EGR valve position | Expanded |
 | Boost Pressure | `0133` | Barometric pressure reference | Expanded |
@@ -679,7 +871,7 @@ The following sensors are planned for future firmware and tuning console integra
 
 ---
 
-## 15. OBD Mode Reference
+## 18. OBD Mode Reference
 
 | Mode | Hex | Description |
 |---|---|---|
@@ -696,7 +888,7 @@ The following sensors are planned for future firmware and tuning console integra
 
 ---
 
-## 16. Safety Protocols
+## 19. Safety Protocols & Data Logging
 
 ### Actuator Safety
 
@@ -715,13 +907,15 @@ The following sensors are planned for future firmware and tuning console integra
 - Warning and critical thresholds in the Thermal tab are **alert triggers only**
 - They do not modify ECU protection thresholds or fuel cut values
 - ECU-level overtemp protection operates independently
+- Thresholds persist to `AsyncStorage` and survive app restarts
 
 ### Data Logging
 
 - OBD telemetry sessions can be started from the OBD diagnostics screen in the Garage
-- Session data is stored in Firebase under `reycinUSA/obd/sessions/{userId}` and `reycinUSA/obd/sessionLogs/{sessionId}`
+- Session records are written to Firebase under `reycinUSA/obd/sessions/{push_key}` using Firebase `push()` — the key is auto-generated, **not** a userId-based path. The `uid` field is stored inside the session record as `{ uid: user.uid, vehicleId, startedAt, endedAt, ... }`
+- Per-sample telemetry data is written to `reycinUSA/obd/sessionLogs/{sessionId}` with keys of the form `t_{timestamp}`
 - High poll rates over extended sessions may generate significant database writes
 
 ---
 
-*This document is maintained by the Reycin USA engineering team. Updates will be published with each firmware release.*
+*This document is maintained by the Reycin USA engineering team and reflects firmware v2.0.0 behavior. Updates will be published with each firmware release.*

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -42,24 +42,10 @@ import { useOBD } from "@/providers/OBDProvider";
 import { useLapTimer } from "@/providers/LapTimerProvider";
 import { usePIT } from "@/providers/PITProvider";
 import type { MsgPriority, PitLogType } from "@/providers/PITProvider";
+import { useTracks } from "@/providers/TracksProvider";
+import type { Track, TrackCoordinate, TrackWaypoint } from "@/providers/TracksProvider";
 
 type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit";
-
-interface TrackCoordinate {
-  latitude: number;
-  longitude: number;
-}
-
-interface Track {
-  id: string;
-  name: string;
-  location: string;
-  length_km: number;
-  center: TrackCoordinate;
-  coordinates: TrackCoordinate[];
-  isUserRecorded?: boolean;
-  recordedAt?: string;
-}
 
 
 
@@ -231,9 +217,11 @@ const floatStyles = StyleSheet.create({
 
 function TrackCard({
   track,
+  isActive,
   onPress,
 }: {
   track: Track;
+  isActive: boolean;
   onPress: () => void;
 }) {
   return (
@@ -244,13 +232,20 @@ function TrackCard({
       testID={`track-card-${track.id}`}
     >
       <View style={trackListStyles.cardLeft}>
-        <View style={trackListStyles.iconDot}>
-          <MapPin size={13} color="#FF1801" strokeWidth={2} />
+        <View style={[trackListStyles.iconDot, isActive && trackListStyles.iconDotActive]}>
+          <MapPin size={13} color={isActive ? "#34C759" : "#FF1801"} strokeWidth={2} />
         </View>
         <View style={trackListStyles.cardInfo}>
-          <Text style={trackListStyles.cardName} numberOfLines={1}>
-            {track.name}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={trackListStyles.cardName} numberOfLines={1}>
+              {track.name}
+            </Text>
+            {isActive && (
+              <View style={trackListStyles.activeBadge}>
+                <Text style={trackListStyles.activeBadgeText}>ACTIVE</Text>
+              </View>
+            )}
+          </View>
           <Text style={trackListStyles.cardMeta}>
             {track.location}
             {"  ·  "}
@@ -293,6 +288,22 @@ const trackListStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  iconDotActive: {
+    backgroundColor: "rgba(52,199,89,0.08)",
+    borderColor: "#0a2a10",
+  },
+  activeBadge: {
+    backgroundColor: "rgba(52,199,89,0.15)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  activeBadgeText: {
+    fontSize: 8,
+    fontWeight: "700" as const,
+    color: "#34C759",
+    letterSpacing: 1,
+  },
   cardInfo: { flex: 1, gap: 2 },
   cardName: {
     fontSize: 13,
@@ -316,20 +327,37 @@ function TracksScreen({
 }: {
   onFloat: (track: Track, coords: TrackCoordinate[]) => void;
 }) {
+  const { userTracks, activeTrackId, setActiveTrackId, saveTrack, deleteTrack, renameTrack, addWaypoint } = useTracks();
   const [listMode, setListMode] = useState<"known" | "mine">("known");
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedCoords, setRecordedCoords] = useState<TrackCoordinate[]>([]);
-  const [userTracks, setUserTracks] = useState<Track[]>([]);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [recordElapsed, setRecordElapsed] = useState(0);
   const [submitSent, setSubmitSent] = useState<string | null>(null);
+  const [submitLoading, setSubmitLoading] = useState<string | null>(null);
+  const [showNamingModal, setShowNamingModal] = useState(false);
+  const [pendingCoords, setPendingCoords] = useState<TrackCoordinate[]>([]);
+  const [trackNameInput, setTrackNameInput] = useState("");
+  const [trackLocationInput, setTrackLocationInput] = useState("User Recorded");
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showWaypointModal, setShowWaypointModal] = useState(false);
+  const [pendingWaypointCoord, setPendingWaypointCoord] = useState<TrackCoordinate | null>(null);
+  const [waypointLabelInput, setWaypointLabelInput] = useState("");
+  const [liveWaypoints, setLiveWaypoints] = useState<TrackWaypoint[]>([]);
+  const [showMarkModal, setShowMarkModal] = useState(false);
+  const [markLabelInput, setMarkLabelInput] = useState("");
 
   const watcherRef = useRef<Location.LocationSubscription | null>(null);
   const recordStartRef = useRef(0);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<LeafletMapHandle>(null);
+  const recordedCoordsRef = useRef<TrackCoordinate[]>([]);
 
   useEffect(() => {
     return () => {
@@ -340,7 +368,7 @@ function TracksScreen({
 
   const startRecording = useCallback(async () => {
     if (Platform.OS === "web") {
-      setLocationError("GPS track recording requires the mobile app.");
+      setLocationError("GPS recording requires the mobile app. Track Library is available on all platforms.");
       return;
     }
     setLocationError(null);
@@ -349,31 +377,23 @@ function TracksScreen({
       setLocationError("Location permission is required to record a track.");
       return;
     }
+    recordedCoordsRef.current = [];
     setRecordedCoords([]);
+    setLiveWaypoints([]);
     setRecordElapsed(0);
     recordStartRef.current = Date.now();
     setIsRecording(true);
-
     elapsedRef.current = setInterval(() => {
       setRecordElapsed(Date.now() - recordStartRef.current);
     }, 500);
-
     watcherRef.current = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 1000,
-        distanceInterval: 3,
-      },
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 3 },
       (loc) => {
-        const coord: TrackCoordinate = {
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        };
+        const coord: TrackCoordinate = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         setRecordedCoords((prev) => {
           const next = [...prev, coord];
-          if (next.length > 1 && mapRef.current) {
-            mapRef.current.update(next, next[next.length - 1]);
-          }
+          recordedCoordsRef.current = next;
+          if (next.length > 1 && mapRef.current) mapRef.current.update(next, next[next.length - 1]);
           return next;
         });
       }
@@ -381,184 +401,327 @@ function TracksScreen({
   }, []);
 
   const stopRecording = useCallback(() => {
-    if (watcherRef.current) {
-      watcherRef.current.remove();
-      watcherRef.current = null;
-    }
-    if (elapsedRef.current) {
-      clearInterval(elapsedRef.current);
-      elapsedRef.current = null;
-    }
+    if (watcherRef.current) { watcherRef.current.remove(); watcherRef.current = null; }
+    if (elapsedRef.current) { clearInterval(elapsedRef.current); elapsedRef.current = null; }
     setIsRecording(false);
-
-    setRecordedCoords((coords) => {
-      if (coords.length > 2) {
-        const newTrack: Track = {
-          id: `user-${Date.now()}`,
-          name: `Track Recording ${new Date().toLocaleDateString()}`,
-          location: "User Recorded",
-          length_km: estimateLength(coords),
-          center: coords[Math.floor(coords.length / 2)],
-          coordinates: [...coords],
-          isUserRecorded: true,
-          recordedAt: new Date().toISOString(),
-        };
-        setUserTracks((prev) => [newTrack, ...prev]);
-        setSelectedTrack(newTrack);
-        setShowMap(true);
-        setListMode("mine");
-      }
-      return coords;
-    });
+    const coords = recordedCoordsRef.current;
+    const dist = estimateLength(coords);
+    if (coords.length < 10 || dist < 0.05) {
+      setLocationError(
+        coords.length < 10
+          ? `Recording too short — only ${coords.length} GPS points captured. Drive further.`
+          : `Track too short (${(dist * 1000).toFixed(0)}m). Minimum is 50m.`
+      );
+      return;
+    }
+    setPendingCoords([...coords]);
+    setTrackNameInput(`Track ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`);
+    setTrackLocationInput("User Recorded");
+    setShowNamingModal(true);
   }, []);
 
-  const handleSelectTrack = useCallback((track: Track) => {
-    setSelectedTrack(track);
+  const handleSaveNamed = useCallback(() => {
+    if (!trackNameInput.trim() || pendingCoords.length === 0) return;
+    const newTrack: Track = {
+      id: `user-${Date.now()}`,
+      name: trackNameInput.trim(),
+      location: trackLocationInput.trim() || "User Recorded",
+      length_km: estimateLength(pendingCoords),
+      center: pendingCoords[Math.floor(pendingCoords.length / 2)],
+      coordinates: [...pendingCoords],
+      waypoints: [...liveWaypoints],
+      isUserRecorded: true,
+      recordedAt: new Date().toISOString(),
+    };
+    saveTrack(newTrack);
+    setShowNamingModal(false);
+    setPendingCoords([]);
+    setTrackNameInput("");
+    setSelectedTrack(newTrack);
     setShowMap(true);
+    setListMode("mine");
+    console.log("[Tracks] Saved:", newTrack.id, newTrack.name, newTrack.length_km, "km");
+  }, [trackNameInput, trackLocationInput, pendingCoords, saveTrack, liveWaypoints]);
+
+  const handleSelectTrack = useCallback((track: Track) => { setSelectedTrack(track); setShowMap(true); }, []);
+  const handleBack = useCallback(() => { setShowMap(false); setSelectedTrack(null); }, []);
+  const handleFloat = useCallback(() => { if (selectedTrack) onFloat(selectedTrack, selectedTrack.coordinates); }, [selectedTrack, onFloat]);
+
+  const handleSubmit = useCallback(async (track: Track) => {
+    setSubmitLoading(track.id);
+    try {
+      const { database: db } = await import("@/config/firebase");
+      const { ref: dbRef, push } = await import("firebase/database");
+      await push(dbRef(db, "reycinUSA/track_submissions"), {
+        id: track.id, name: track.name, location: track.location,
+        length_km: track.length_km, center: track.center,
+        coordinates: track.coordinates, waypoints: track.waypoints ?? [],
+        recordedAt: track.recordedAt, submittedAt: new Date().toISOString(),
+        platform: Platform.OS,
+      });
+      setSubmitSent(track.id);
+      console.log("[Tracks] Submitted:", track.id);
+      setTimeout(() => setSubmitSent(null), 4000);
+    } catch (e) {
+      console.error("[Tracks] Submit failed:", e);
+      setLocationError("Submission failed — check network connection.");
+    } finally {
+      setSubmitLoading(null);
+    }
   }, []);
 
-  const handleBack = useCallback(() => {
-    setShowMap(false);
-    setSelectedTrack(null);
-  }, []);
+  const handleDeleteConfirm = useCallback((trackId: string) => {
+    deleteTrack(trackId);
+    setShowDeleteConfirm(null);
+    if (selectedTrack?.id === trackId) { setShowMap(false); setSelectedTrack(null); }
+  }, [deleteTrack, selectedTrack]);
 
-  const handleFloat = useCallback(() => {
-    if (!selectedTrack) return;
-    onFloat(selectedTrack, selectedTrack.coordinates);
-  }, [selectedTrack, onFloat]);
+  const handleRenameConfirm = useCallback(() => {
+    if (!renameTarget || !renameInput.trim()) return;
+    renameTrack(renameTarget, renameInput.trim());
+    setSelectedTrack((prev) => prev?.id === renameTarget ? { ...prev, name: renameInput.trim() } : prev);
+    setShowRenameModal(false); setRenameTarget(null); setRenameInput("");
+  }, [renameTarget, renameInput, renameTrack]);
 
-  const handleSubmit = useCallback((trackId: string) => {
-    setSubmitSent(trackId);
-    setTimeout(() => setSubmitSent(null), 3000);
-  }, []);
+  const handleMapTap = useCallback((coord: TrackCoordinate) => {
+    if (selectedTrack?.isUserRecorded) { setPendingWaypointCoord(coord); setWaypointLabelInput(""); setShowWaypointModal(true); }
+  }, [selectedTrack]);
+
+  const handleMarkPoint = useCallback(() => {
+    const coords = recordedCoordsRef.current;
+    if (coords.length === 0) return;
+    const coord = coords[coords.length - 1];
+    const wp: TrackWaypoint = { id: `wp-${Date.now()}`, label: markLabelInput.trim() || "Waypoint", coordinate: coord };
+    setLiveWaypoints((prev) => [...prev, wp]);
+    setShowMarkModal(false);
+    setMarkLabelInput("");
+    console.log("[Tracks] Marked point during recording:", wp.label, coord);
+  }, [markLabelInput]);
+
+  const handleSaveWaypoint = useCallback(() => {
+    if (!pendingWaypointCoord || !selectedTrack) return;
+    const waypoint: TrackWaypoint = { id: `wp-${Date.now()}`, label: waypointLabelInput.trim() || "Waypoint", coordinate: pendingWaypointCoord };
+    addWaypoint(selectedTrack.id, waypoint);
+    setSelectedTrack((prev) => prev ? { ...prev, waypoints: [...(prev.waypoints ?? []), waypoint] } : prev);
+    setShowWaypointModal(false); setPendingWaypointCoord(null); setWaypointLabelInput("");
+  }, [pendingWaypointCoord, waypointLabelInput, selectedTrack, addWaypoint]);
+
+  const filteredKnownTracks = useMemo(() => {
+    if (!searchQuery.trim()) return KNOWN_TRACKS;
+    const q = searchQuery.toLowerCase();
+    return KNOWN_TRACKS.filter((t) => t.name.toLowerCase().includes(q) || t.location.toLowerCase().includes(q));
+  }, [searchQuery]);
 
   if (isRecording) {
-    const liveCenter =
-      recordedCoords.length > 0
-        ? recordedCoords[recordedCoords.length - 1]
-        : { latitude: 36.5844, longitude: -121.7547 };
-
+    const liveCenter = recordedCoordsRef.current.length > 0
+      ? recordedCoordsRef.current[recordedCoordsRef.current.length - 1]
+      : { latitude: 36.5844, longitude: -121.7547 };
     return (
       <View style={recStyles.root}>
         <View style={recStyles.topBar}>
-          <View style={recStyles.recBadge}>
-            <View style={recStyles.recDot} />
-            <Text style={recStyles.recLabel}>RECORDING</Text>
-          </View>
+          <View style={recStyles.recBadge}><View style={recStyles.recDot} /><Text style={recStyles.recLabel}>RECORDING</Text></View>
           <Text style={recStyles.recTime}>{formatElapsed(recordElapsed)}</Text>
           <Text style={recStyles.recPts}>{recordedCoords.length} pts</Text>
         </View>
-        <LeafletMapView
-          ref={mapRef}
-          center={liveCenter}
-          zoom={16}
-          coordinates={[]}
-          interactive={false}
-          style={recStyles.map}
-        />
+        <View style={{ flex: 1 }}>
+          <LeafletMapView ref={mapRef} center={liveCenter} zoom={16} coordinates={[]} interactive={false} followMode={true} showUserLocation={true} style={recStyles.map} />
+          <TouchableOpacity style={recStyles.locateBtn} onPress={() => mapRef.current?.locateUser()} activeOpacity={0.75} testID="recording-locate-btn">
+            <Navigation size={16} color="#007AFF" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
         <View style={recStyles.bottomBar}>
           <View style={recStyles.statsRow}>
-            <View style={recStyles.statCell}>
-              <Text style={recStyles.statLabel}>DISTANCE</Text>
-              <Text style={recStyles.statValue}>
-                {estimateLength(recordedCoords).toFixed(2)} km
-              </Text>
-            </View>
+            <View style={recStyles.statCell}><Text style={recStyles.statLabel}>DISTANCE</Text><Text style={recStyles.statValue}>{estimateLength(recordedCoords).toFixed(2)} km</Text></View>
             <View style={recStyles.statDiv} />
-            <View style={recStyles.statCell}>
-              <Text style={recStyles.statLabel}>POINTS</Text>
-              <Text style={recStyles.statValue}>{recordedCoords.length}</Text>
-            </View>
+            <View style={recStyles.statCell}><Text style={recStyles.statLabel}>POINTS</Text><Text style={recStyles.statValue}>{recordedCoords.length}</Text></View>
             <View style={recStyles.statDiv} />
-            <View style={recStyles.statCell}>
-              <Text style={recStyles.statLabel}>TIME</Text>
-              <Text style={recStyles.statValue}>
-                {formatElapsed(recordElapsed)}
-              </Text>
-            </View>
+            <View style={recStyles.statCell}><Text style={recStyles.statLabel}>TIME</Text><Text style={recStyles.statValue}>{formatElapsed(recordElapsed)}</Text></View>
           </View>
           <TouchableOpacity
-            style={recStyles.stopBtn}
-            onPress={stopRecording}
+            style={[recStyles.markBtn, recordedCoords.length === 0 && recStyles.markBtnDisabled]}
+            onPress={() => { setMarkLabelInput(""); setShowMarkModal(true); }}
             activeOpacity={0.8}
-            testID="stop-recording-btn"
+            disabled={recordedCoords.length === 0}
+            testID="mark-point-btn"
           >
+            <MapPin size={14} color="#FFD600" strokeWidth={2} />
+            <Text style={recStyles.markBtnText}>MARK POINT</Text>
+            {liveWaypoints.length > 0 && <Text style={recStyles.markBtnCount}>{liveWaypoints.length} marked</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={recStyles.stopBtn} onPress={stopRecording} activeOpacity={0.8} testID="stop-recording-btn">
             <Square size={16} fill="#000" color="#000" strokeWidth={0} />
             <Text style={recStyles.stopBtnText}>STOP RECORDING</Text>
           </TouchableOpacity>
         </View>
+        <Modal visible={showMarkModal} transparent animationType="slide" onRequestClose={() => setShowMarkModal(false)} statusBarTranslucent>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={namingModalStyles.overlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowMarkModal(false)} />
+            <View style={namingModalStyles.sheet}>
+              <View style={namingModalStyles.handle} />
+              <View style={namingModalStyles.headerRow}>
+                <MapPin size={15} color="#FFD600" strokeWidth={2} />
+                <Text style={namingModalStyles.title}>MARK POINT</Text>
+              </View>
+              {recordedCoordsRef.current.length > 0 && (
+                <Text style={namingModalStyles.coordText}>
+                  {recordedCoordsRef.current[recordedCoordsRef.current.length - 1].latitude.toFixed(5)},{" "}
+                  {recordedCoordsRef.current[recordedCoordsRef.current.length - 1].longitude.toFixed(5)}
+                </Text>
+              )}
+              <TextInput
+                style={namingModalStyles.input}
+                value={markLabelInput}
+                onChangeText={setMarkLabelInput}
+                autoFocus
+                placeholder="e.g. Start/Finish, Turn 1, Pit Entry..."
+                placeholderTextColor="#2a2a2a"
+                autoCorrect={false}
+                testID="mark-point-input"
+              />
+              <TouchableOpacity style={namingModalStyles.saveBtn} onPress={handleMarkPoint} activeOpacity={0.85} testID="confirm-mark-point-btn">
+                <Text style={namingModalStyles.saveBtnText}>MARK POINT</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </View>
     );
   }
 
   if (showMap && selectedTrack) {
-
-
+    const isActive = activeTrackId === selectedTrack.id;
+    const isUserTrack = selectedTrack.isUserRecorded === true;
     return (
       <View style={mapViewStyles.root}>
         <View style={mapViewStyles.topBar}>
-          <TouchableOpacity
-            style={mapViewStyles.backBtn}
-            onPress={handleBack}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity style={mapViewStyles.backBtn} onPress={handleBack} activeOpacity={0.7}>
             <Text style={mapViewStyles.backText}>← BACK</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={mapViewStyles.floatBtn}
-            onPress={handleFloat}
-            activeOpacity={0.7}
-            testID="float-map-btn"
-          >
-            <Maximize2 size={13} color="#FF1801" strokeWidth={2} />
-            <Text style={mapViewStyles.floatBtnText}>FLOAT</Text>
-          </TouchableOpacity>
+          <View style={mapViewStyles.topBtns}>
+            <TouchableOpacity style={mapViewStyles.locateBtn} onPress={() => mapRef.current?.locateUser()} activeOpacity={0.7} testID="locate-me-btn">
+              <Navigation size={13} color="#007AFF" strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity style={mapViewStyles.floatBtn} onPress={handleFloat} activeOpacity={0.7} testID="float-map-btn">
+              <Maximize2 size={13} color="#FF1801" strokeWidth={2} />
+              <Text style={mapViewStyles.floatBtnText}>FLOAT</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <LeafletMapView
-          center={selectedTrack.center}
-          zoom={14}
-          coordinates={selectedTrack.coordinates}
-          markerCoordinate={selectedTrack.coordinates.length === 0 ? selectedTrack.center : undefined}
-          interactive={true}
-          style={mapViewStyles.map}
-        />
+        <View style={{ flex: 1 }}>
+          <LeafletMapView
+            ref={mapRef}
+            center={selectedTrack.center}
+            zoom={14}
+            coordinates={selectedTrack.coordinates}
+            markerCoordinate={selectedTrack.coordinates.length === 0 ? selectedTrack.center : undefined}
+            interactive={true}
+            showUserLocation={true}
+            onTap={isUserTrack ? handleMapTap : undefined}
+            style={mapViewStyles.map}
+          />
+        </View>
         <View style={mapViewStyles.infoCard}>
           <View style={mapViewStyles.infoRow}>
             <View style={mapViewStyles.infoMain}>
-              <Text style={mapViewStyles.infoName}>{selectedTrack.name}</Text>
-              <Text style={mapViewStyles.infoMeta}>
-                {selectedTrack.location}
-                {"  ·  "}
-                {selectedTrack.length_km} km
-              </Text>
-              {selectedTrack.coordinates.length === 0 && (
-                <Text style={mapViewStyles.noDataNote}>
-                  Boundary data not yet available — record or import to map outline
-                </Text>
+              <View style={mapViewStyles.infoNameRow}>
+                <Text style={mapViewStyles.infoName} numberOfLines={1}>{selectedTrack.name}</Text>
+                {isActive && <View style={mapViewStyles.activePill}><Text style={mapViewStyles.activePillText}>ACTIVE</Text></View>}
+              </View>
+              <Text style={mapViewStyles.infoMeta}>{selectedTrack.location}  ·  {selectedTrack.length_km} km</Text>
+              {selectedTrack.coordinates.length === 0 && <Text style={mapViewStyles.noDataNote}>Boundary data pending — tap FLOAT to keep map visible while driving</Text>}
+              {isUserTrack && <Text style={mapViewStyles.tapHint}>Tap map to place waypoint markers</Text>}
+            </View>
+            <View style={mapViewStyles.actionCol}>
+              <TouchableOpacity
+                style={[mapViewStyles.actionBtn, isActive && mapViewStyles.actionBtnActive]}
+                onPress={() => setActiveTrackId(isActive ? null : selectedTrack.id)}
+                activeOpacity={0.75} testID="set-active-track-btn"
+              >
+                <Text style={[mapViewStyles.actionBtnText, isActive && mapViewStyles.actionBtnTextActive]}>{isActive ? "ACTIVE ✓" : "SET ACTIVE"}</Text>
+              </TouchableOpacity>
+              {isUserTrack && (
+                <>
+                  <TouchableOpacity
+                    style={[mapViewStyles.actionBtn, submitSent === selectedTrack.id && mapViewStyles.actionBtnSent]}
+                    onPress={() => handleSubmit(selectedTrack)}
+                    disabled={!!submitLoading || submitSent === selectedTrack.id}
+                    activeOpacity={0.75} testID="submit-track-btn"
+                  >
+                    {submitSent === selectedTrack.id ? <Text style={mapViewStyles.actionBtnText}>SENT ✓</Text>
+                      : submitLoading === selectedTrack.id ? <Text style={mapViewStyles.actionBtnText}>...</Text>
+                      : <><Send size={9} color="#FF1801" strokeWidth={2} /><Text style={mapViewStyles.actionBtnText}>SUBMIT</Text></>}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={mapViewStyles.actionBtn}
+                    onPress={() => { setRenameTarget(selectedTrack.id); setRenameInput(selectedTrack.name); setShowRenameModal(true); }}
+                    activeOpacity={0.75} testID="rename-track-btn"
+                  >
+                    <Text style={mapViewStyles.actionBtnText}>RENAME</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[mapViewStyles.actionBtn, mapViewStyles.actionBtnDelete]}
+                    onPress={() => setShowDeleteConfirm(selectedTrack.id)}
+                    activeOpacity={0.75} testID="delete-track-btn"
+                  >
+                    <Text style={[mapViewStyles.actionBtnText, mapViewStyles.actionBtnTextDelete]}>DELETE</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
-            {selectedTrack.isUserRecorded && (
-              <TouchableOpacity
-                style={[
-                  mapViewStyles.submitBtn,
-                  submitSent === selectedTrack.id && mapViewStyles.submitBtnSent,
-                ]}
-                onPress={() => handleSubmit(selectedTrack.id)}
-                activeOpacity={0.75}
-                testID="submit-track-btn"
-              >
-                {submitSent === selectedTrack.id ? (
-                  <Text style={mapViewStyles.submitBtnText}>SENT ✓</Text>
-                ) : (
-                  <>
-                    <Send size={11} color="#FF1801" strokeWidth={2} />
-                    <Text style={mapViewStyles.submitBtnText}>SUBMIT</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
           </View>
+          {isUserTrack && (selectedTrack.waypoints ?? []).length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={mapViewStyles.waypointScroll} contentContainerStyle={mapViewStyles.waypointContent}>
+              {(selectedTrack.waypoints ?? []).map((wp) => (
+                <View key={wp.id} style={mapViewStyles.waypointChip}>
+                  <MapPin size={9} color="#FFD600" strokeWidth={2} />
+                  <Text style={mapViewStyles.waypointChipText}>{wp.label}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
+
+        <Modal visible={showDeleteConfirm !== null} transparent animationType="fade" onRequestClose={() => setShowDeleteConfirm(null)} statusBarTranslucent>
+          <Pressable style={confirmModalStyles.overlay} onPress={() => setShowDeleteConfirm(null)}>
+            <View style={confirmModalStyles.card}>
+              <Text style={confirmModalStyles.title}>DELETE TRACK?</Text>
+              <Text style={confirmModalStyles.sub}>This cannot be undone.</Text>
+              <View style={confirmModalStyles.btns}>
+                <TouchableOpacity style={confirmModalStyles.cancelBtn} onPress={() => setShowDeleteConfirm(null)} activeOpacity={0.75}><Text style={confirmModalStyles.cancelText}>CANCEL</Text></TouchableOpacity>
+                <TouchableOpacity style={confirmModalStyles.confirmBtn} onPress={() => showDeleteConfirm && handleDeleteConfirm(showDeleteConfirm)} activeOpacity={0.75} testID="confirm-delete-btn"><Text style={confirmModalStyles.confirmText}>DELETE</Text></TouchableOpacity>
+              </View>
+            </View>
+          </Pressable>
+        </Modal>
+
+        <Modal visible={showRenameModal} transparent animationType="slide" onRequestClose={() => setShowRenameModal(false)} statusBarTranslucent>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={namingModalStyles.overlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowRenameModal(false)} />
+            <View style={namingModalStyles.sheet}>
+              <View style={namingModalStyles.handle} />
+              <Text style={namingModalStyles.title}>RENAME TRACK</Text>
+              <TextInput style={namingModalStyles.input} value={renameInput} onChangeText={setRenameInput} autoFocus placeholder="Track name..." placeholderTextColor="#2a2a2a" autoCorrect={false} testID="rename-track-input" />
+              <TouchableOpacity style={namingModalStyles.saveBtn} onPress={handleRenameConfirm} activeOpacity={0.85} testID="confirm-rename-btn">
+                <Text style={namingModalStyles.saveBtnText}>SAVE</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        <Modal visible={showWaypointModal} transparent animationType="slide" onRequestClose={() => setShowWaypointModal(false)} statusBarTranslucent>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={namingModalStyles.overlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowWaypointModal(false)} />
+            <View style={namingModalStyles.sheet}>
+              <View style={namingModalStyles.handle} />
+              <Text style={namingModalStyles.title}>ADD WAYPOINT</Text>
+              {pendingWaypointCoord && <Text style={namingModalStyles.coordText}>{pendingWaypointCoord.latitude.toFixed(5)}, {pendingWaypointCoord.longitude.toFixed(5)}</Text>}
+              <TextInput style={namingModalStyles.input} value={waypointLabelInput} onChangeText={setWaypointLabelInput} autoFocus placeholder="Label (e.g. Turn 1, Pit Entry)..." placeholderTextColor="#2a2a2a" autoCorrect={false} testID="waypoint-label-input" />
+              <TouchableOpacity style={namingModalStyles.saveBtn} onPress={handleSaveWaypoint} activeOpacity={0.85} testID="save-waypoint-btn">
+                <Text style={namingModalStyles.saveBtnText}>ADD WAYPOINT</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </View>
     );
   }
@@ -566,55 +729,30 @@ function TracksScreen({
   return (
     <View style={tracksStyles.root}>
       <View style={tracksStyles.segmentBar}>
-        <TouchableOpacity
-          style={[
-            tracksStyles.segment,
-            listMode === "known" && tracksStyles.segmentActive,
-          ]}
-          onPress={() => setListMode("known")}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              tracksStyles.segmentText,
-              listMode === "known" && tracksStyles.segmentTextActive,
-            ]}
-          >
-            TRACK LIBRARY
-          </Text>
+        <TouchableOpacity style={[tracksStyles.segment, listMode === "known" && tracksStyles.segmentActive]} onPress={() => setListMode("known")} activeOpacity={0.7}>
+          <Text style={[tracksStyles.segmentText, listMode === "known" && tracksStyles.segmentTextActive]}>TRACK LIBRARY</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            tracksStyles.segment,
-            listMode === "mine" && tracksStyles.segmentActive,
-          ]}
-          onPress={() => setListMode("mine")}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              tracksStyles.segmentText,
-              listMode === "mine" && tracksStyles.segmentTextActive,
-            ]}
-          >
-            MY TRACKS
-            {userTracks.length > 0 && (
-              <Text style={tracksStyles.countBadge}> {userTracks.length}</Text>
-            )}
+        <TouchableOpacity style={[tracksStyles.segment, listMode === "mine" && tracksStyles.segmentActive]} onPress={() => setListMode("mine")} activeOpacity={0.7}>
+          <Text style={[tracksStyles.segmentText, listMode === "mine" && tracksStyles.segmentTextActive]}>
+            MY TRACKS{userTracks.length > 0 && <Text style={tracksStyles.countBadge}> {userTracks.length}</Text>}
           </Text>
         </TouchableOpacity>
       </View>
 
       {listMode === "known" && (
-        <FlatList
-          data={KNOWN_TRACKS}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TrackCard track={item} onPress={() => handleSelectTrack(item)} />
-          )}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 32 }}
-        />
+        <>
+          <View style={tracksStyles.searchWrap}>
+            <TextInput style={tracksStyles.searchInput} value={searchQuery} onChangeText={setSearchQuery} placeholder="Search tracks..." placeholderTextColor="#2a2a2a" autoCorrect={false} clearButtonMode="while-editing" testID="track-search-input" />
+          </View>
+          <FlatList
+            data={filteredKnownTracks}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <TrackCard track={item} isActive={activeTrackId === item.id} onPress={() => handleSelectTrack(item)} />}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 32 }}
+            ListEmptyComponent={<View style={tracksStyles.emptyState}><Text style={tracksStyles.emptyTitle}>No tracks found</Text></View>}
+          />
+        </>
       )}
 
       {listMode === "mine" && (
@@ -622,46 +760,62 @@ function TracksScreen({
           {locationError && (
             <View style={tracksStyles.errorBanner}>
               <Text style={tracksStyles.errorText}>{locationError}</Text>
+              <TouchableOpacity onPress={() => setLocationError(null)} hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}>
+                <X size={14} color="#FF4444" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
           )}
-          <TouchableOpacity
-            style={tracksStyles.recordCta}
-            onPress={startRecording}
-            activeOpacity={0.8}
-            testID="start-recording-btn"
-          >
-            <View style={tracksStyles.recordCtaIcon}>
-              <Navigation size={18} color="#FF1801" strokeWidth={2} />
-            </View>
+          <TouchableOpacity style={tracksStyles.recordCta} onPress={startRecording} activeOpacity={0.8} testID="start-recording-btn">
+            <View style={tracksStyles.recordCtaIcon}><Navigation size={18} color="#FF1801" strokeWidth={2} /></View>
             <View style={tracksStyles.recordCtaText}>
               <Text style={tracksStyles.recordCtaTitle}>Record New Track</Text>
-              <Text style={tracksStyles.recordCtaSub}>
-                Uses device GPS to map boundary — start/stop from app
-              </Text>
+              <Text style={tracksStyles.recordCtaSub}>{Platform.OS === "web" ? "Recording requires the mobile app" : "Uses device GPS to map boundary — start/stop from app"}</Text>
             </View>
             <Plus size={18} color="#FF1801" strokeWidth={2} />
           </TouchableOpacity>
-
           {userTracks.length === 0 && (
             <View style={tracksStyles.emptyState}>
               <BookmarkPlus size={32} color="#1a1a1a" strokeWidth={1.5} />
               <Text style={tracksStyles.emptyTitle}>No Recorded Tracks</Text>
-              <Text style={tracksStyles.emptySub}>
-                Drive your circuit and tap Record to map it. Recorded tracks can be submitted to the Reycin team for refinement.
-              </Text>
+              <Text style={tracksStyles.emptySub}>Drive your circuit and tap Record to map it. Recorded tracks can be submitted to the Reycin team for refinement.</Text>
             </View>
           )}
-
-          {userTracks.map((track) => (
-            <TrackCard
-              key={track.id}
-              track={track}
-              onPress={() => handleSelectTrack(track)}
-            />
-          ))}
+          {userTracks.map((track) => <TrackCard key={track.id} track={track} isActive={activeTrackId === track.id} onPress={() => handleSelectTrack(track)} />)}
           <View style={{ height: 32 }} />
         </ScrollView>
       )}
+
+      <Modal visible={showNamingModal} transparent animationType="slide" onRequestClose={() => setShowNamingModal(false)} statusBarTranslucent>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={namingModalStyles.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowNamingModal(false)} />
+          <View style={namingModalStyles.sheet}>
+            <View style={namingModalStyles.handle} />
+            <View style={namingModalStyles.headerRow}>
+              <Navigation size={15} color="#FF1801" strokeWidth={2} />
+              <Text style={namingModalStyles.title}>NAME YOUR TRACK</Text>
+            </View>
+            <View style={namingModalStyles.statsRow}>
+              <View style={namingModalStyles.statCell}><Text style={namingModalStyles.statLabel}>POINTS</Text><Text style={namingModalStyles.statValue}>{pendingCoords.length}</Text></View>
+              <View style={namingModalStyles.statDiv} />
+              <View style={namingModalStyles.statCell}><Text style={namingModalStyles.statLabel}>LENGTH</Text><Text style={namingModalStyles.statValue}>{estimateLength(pendingCoords).toFixed(2)} km</Text></View>
+            </View>
+            <View style={namingModalStyles.fieldSection}>
+              <Text style={namingModalStyles.fieldLabel}>TRACK NAME</Text>
+              <TextInput style={namingModalStyles.input} value={trackNameInput} onChangeText={setTrackNameInput} autoFocus placeholder="My track name..." placeholderTextColor="#2a2a2a" autoCorrect={false} testID="track-name-input" />
+            </View>
+            <View style={namingModalStyles.fieldSection}>
+              <Text style={namingModalStyles.fieldLabel}>LOCATION (OPTIONAL)</Text>
+              <TextInput style={namingModalStyles.input} value={trackLocationInput} onChangeText={setTrackLocationInput} placeholder="City, State..." placeholderTextColor="#2a2a2a" autoCorrect={false} testID="track-location-input" />
+            </View>
+            <TouchableOpacity
+              style={[namingModalStyles.saveBtn, !trackNameInput.trim() && namingModalStyles.saveBtnDisabled]}
+              onPress={handleSaveNamed} disabled={!trackNameInput.trim()} activeOpacity={0.85} testID="confirm-save-track-btn"
+            >
+              <Text style={namingModalStyles.saveBtnText}>SAVE TRACK</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -769,6 +923,48 @@ const recStyles = StyleSheet.create({
     color: "#000",
     letterSpacing: 2,
   },
+  markBtn: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+    backgroundColor: "rgba(255,214,0,0.06)",
+    borderWidth: 1,
+    borderColor: "#2a2200",
+    borderRadius: 8,
+    paddingVertical: 11,
+  },
+  markBtnDisabled: { opacity: 0.3 },
+  markBtnText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: "#FFD600",
+    letterSpacing: 1.5,
+  },
+  markBtnCount: {
+    fontSize: 10,
+    fontWeight: "600" as const,
+    color: "#FFD600",
+    opacity: 0.6,
+  },
+  locateBtn: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#080808",
+    borderWidth: 1,
+    borderColor: "#1a1a1a",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 6,
+  },
 });
 
 const mapViewStyles = StyleSheet.create({
@@ -870,6 +1066,110 @@ const mapViewStyles = StyleSheet.create({
     color: "#FF1801",
     letterSpacing: 1,
   },
+  topBtns: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  locateBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#0a0a0a",
+    borderWidth: 1,
+    borderColor: "#1a1a1a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  activePill: {
+    backgroundColor: "rgba(52,199,89,0.15)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  activePillText: {
+    fontSize: 8,
+    fontWeight: "700" as const,
+    color: "#34C759",
+    letterSpacing: 1,
+  },
+  tapHint: {
+    fontSize: 10,
+    color: "#2a2a2a",
+    marginTop: 4,
+    fontStyle: "italic" as const,
+  },
+  actionCol: {
+    gap: 6,
+    alignItems: "flex-end",
+    flexShrink: 0,
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "#222",
+    backgroundColor: "#0a0a0a",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 5,
+    minWidth: 80,
+    justifyContent: "center",
+  },
+  actionBtnActive: {
+    borderColor: "#0a2a10",
+    backgroundColor: "rgba(52,199,89,0.1)",
+  },
+  actionBtnSent: {
+    borderColor: "#0a2a00",
+    backgroundColor: "rgba(52,199,89,0.06)",
+  },
+  actionBtnDelete: {
+    borderColor: "#2a0a00",
+    backgroundColor: "rgba(255,24,1,0.04)",
+  },
+  actionBtnText: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    color: "#888",
+    letterSpacing: 1,
+  },
+  actionBtnTextActive: {
+    color: "#34C759",
+  },
+  actionBtnTextDelete: {
+    color: "#FF3B30",
+  },
+  waypointScroll: {
+    marginTop: 10,
+  },
+  waypointContent: {
+    gap: 6,
+    paddingRight: 4,
+  },
+  waypointChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#0d0d0d",
+    borderWidth: 1,
+    borderColor: "#2a2200",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  waypointChipText: {
+    fontSize: 10,
+    fontWeight: "600" as const,
+    color: "#FFD600",
+  },
 });
 
 const tracksStyles = StyleSheet.create({
@@ -907,11 +1207,31 @@ const tracksStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2a0a00",
     borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   errorText: {
+    flex: 1,
     fontSize: 12,
     color: "#FF4444",
-    textAlign: "center",
+  },
+  searchWrap: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#0d0d0d",
+  },
+  searchInput: {
+    backgroundColor: "#0a0a0a",
+    borderWidth: 1,
+    borderColor: "#1a1a1a",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: "#FFF",
   },
   recordCta: {
     flexDirection: "row",
@@ -964,6 +1284,94 @@ const tracksStyles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
   },
+});
+
+const namingModalStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.7)" },
+  sheet: {
+    backgroundColor: "#080808",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    borderColor: "#1a1a1a",
+    padding: 20,
+    paddingBottom: 40,
+    gap: 14,
+  },
+  handle: { width: 36, height: 4, backgroundColor: "#222", borderRadius: 2, alignSelf: "center" as const, marginBottom: 4 },
+  headerRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
+  title: { fontSize: 11, fontWeight: "700" as const, color: "#FFF", letterSpacing: 2 },
+  coordText: { fontSize: 10, color: "#444", fontVariant: ["tabular-nums"] as const },
+  statsRow: {
+    flexDirection: "row" as const,
+    backgroundColor: "#0d0d0d",
+    borderWidth: 1,
+    borderColor: "#1a1a1a",
+    borderRadius: 10,
+    padding: 14,
+  },
+  statCell: { flex: 1, alignItems: "center" as const, gap: 4 },
+  statDiv: { width: 1, backgroundColor: "#1a1a1a" },
+  statLabel: { fontSize: 9, fontWeight: "700" as const, color: "#333", letterSpacing: 1.5 },
+  statValue: { fontSize: 16, fontWeight: "300" as const, color: "#FFF", fontVariant: ["tabular-nums"] as const },
+  fieldSection: { gap: 6 },
+  fieldLabel: { fontSize: 9, fontWeight: "700" as const, color: "#333", letterSpacing: 1.5 },
+  input: {
+    backgroundColor: "#0d0d0d",
+    borderWidth: 1,
+    borderColor: "#1e1e1e",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 14,
+    color: "#FFF",
+  },
+  saveBtn: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  saveBtnDisabled: { opacity: 0.35 },
+  saveBtnText: { fontSize: 13, fontWeight: "700" as const, color: "#000", letterSpacing: 1 },
+});
+
+const confirmModalStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center" as const, justifyContent: "center" as const, padding: 32 },
+  card: {
+    backgroundColor: "#0d0d0d",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#1e1e1e",
+    padding: 24,
+    width: "100%" as const,
+    gap: 10,
+    alignItems: "center" as const,
+  },
+  title: { fontSize: 13, fontWeight: "700" as const, color: "#FFF", letterSpacing: 1.5 },
+  sub: { fontSize: 12, color: "#444", textAlign: "center" as const },
+  btns: { flexDirection: "row" as const, gap: 10, marginTop: 6 },
+  cancelBtn: {
+    flex: 1,
+    alignItems: "center" as const,
+    paddingVertical: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#222",
+    backgroundColor: "#111",
+  },
+  cancelText: { fontSize: 12, fontWeight: "600" as const, color: "#888" },
+  confirmBtn: {
+    flex: 1,
+    alignItems: "center" as const,
+    paddingVertical: 11,
+    borderRadius: 8,
+    backgroundColor: "#FF3B30",
+  },
+  confirmText: { fontSize: 12, fontWeight: "700" as const, color: "#FFF" },
 });
 
 function formatTime(ms: number): string {
@@ -1711,6 +2119,7 @@ function LapTimerScreen() {
     reset,
     saveSession,
   } = useLapTimer();
+  const { activeTrack } = useTracks();
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -1733,7 +2142,7 @@ function LapTimerScreen() {
   }, [running, pulseAnim]);
 
   const handleSave = useCallback(() => {
-    saveSession(trackName || "Unknown Track", null, notes || undefined);
+    saveSession(trackName || activeTrack?.name || "Unknown Track", activeTrack?.id ?? null, notes || undefined);
     setSavedConfirm(true);
     setTimeout(() => {
       setShowSaveModal(false);
@@ -1741,7 +2150,12 @@ function LapTimerScreen() {
       setTrackName("");
       setNotes("");
     }, 1200);
-  }, [saveSession, trackName, notes]);
+  }, [saveSession, trackName, notes, activeTrack]);
+
+  const handleOpenSaveModal = useCallback(() => {
+    if (activeTrack && !trackName) setTrackName(activeTrack.name);
+    setShowSaveModal(true);
+  }, [activeTrack, trackName]);
 
   const canSave = !running && (laps.length > 0 || elapsed > 0);
 
@@ -1802,7 +2216,7 @@ function LapTimerScreen() {
           {canSave && (
             <TouchableOpacity
               style={lapStyles.saveBtn}
-              onPress={() => setShowSaveModal(true)}
+              onPress={handleOpenSaveModal}
               activeOpacity={0.8}
               testID="save-session-btn"
             >

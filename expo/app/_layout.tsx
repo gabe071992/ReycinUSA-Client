@@ -8,6 +8,7 @@ import { CartProvider } from "@/providers/CartProvider";
 import { OBDProvider } from "@/providers/OBDProvider";
 import { LapTimerProvider } from "@/providers/LapTimerProvider";
 import { PITProvider } from "@/providers/PITProvider";
+import { TracksProvider } from "@/providers/TracksProvider";
 import { BRGAuthProvider } from "@/providers/BRGAuthProvider";
 
 void SplashScreen.preventAutoHideAsync();
@@ -54,9 +55,11 @@ export default function RootLayout() {
             <CartProvider>
               <OBDProvider>
                 <LapTimerProvider>
-                  <PITProvider>
-                    <RootLayoutNav />
-                  </PITProvider>
+                  <TracksProvider>
+                    <PITProvider>
+                      <RootLayoutNav />
+                    </PITProvider>
+                  </TracksProvider>
                 </LapTimerProvider>
               </OBDProvider>
             </CartProvider>

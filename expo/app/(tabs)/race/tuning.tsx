@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -1111,6 +1112,26 @@ export default function TuningConsole() {
   const [ectWarn, setEctWarn] = useState(105);
   const [ectCrit, setEctCrit] = useState(115);
 
+  useEffect(() => {
+    void AsyncStorage.multiGet(["tuning_ect_warn", "tuning_ect_crit"]).then((pairs) => {
+      const warnRaw = pairs[0][1];
+      const critRaw = pairs[1][1];
+      if (warnRaw !== null) setEctWarn(parseInt(warnRaw, 10));
+      if (critRaw !== null) setEctCrit(parseInt(critRaw, 10));
+      console.log("[Tuning] Loaded ECT thresholds — warn:", warnRaw, "crit:", critRaw);
+    });
+  }, []);
+
+  const handleEctWarnChange = useCallback((v: number) => {
+    setEctWarn(v);
+    void AsyncStorage.setItem("tuning_ect_warn", String(v));
+  }, []);
+
+  const handleEctCritChange = useCallback((v: number) => {
+    setEctCrit(v);
+    void AsyncStorage.setItem("tuning_ect_crit", String(v));
+  }, []);
+
   const handleToggleOptional = useCallback((id: string) => {
     setEnabledOptional((prev) => {
       const next = new Set(prev);
@@ -1135,8 +1156,8 @@ export default function TuningConsole() {
           <ThermalTab
             ectWarn={ectWarn}
             ectCrit={ectCrit}
-            onEctWarnChange={setEctWarn}
-            onEctCritChange={setEctCrit}
+            onEctWarnChange={handleEctWarnChange}
+            onEctCritChange={handleEctCritChange}
           />
         );
       case "actuators":
@@ -1146,7 +1167,7 @@ export default function TuningConsole() {
       case "console":
         return <ConsoleTab />;
     }
-  }, [activeTab, enabledOptional, handleToggleOptional, ectWarn, ectCrit]);
+  }, [activeTab, enabledOptional, handleToggleOptional, ectWarn, ectCrit, handleEctWarnChange, handleEctCritChange]);
 
   return (
     <View style={tuningStyles.root}>

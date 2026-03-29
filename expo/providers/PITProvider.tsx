@@ -201,7 +201,7 @@ export const [PITProvider, usePIT] = createContextHook(() => {
         console.log("[PIT] Hub WebSocket connected");
         setHubStatus("connected");
         wsRef.current = ws;
-        ws.send(JSON.stringify({ type: "driver_ready", role: "driver" }));
+        ws.send(JSON.stringify({ type: "register", role: "driver" }));
       };
       ws.onmessage = (event) => {
         try {
