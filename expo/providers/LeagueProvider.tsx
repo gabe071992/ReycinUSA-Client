@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import createContextHook from "@nkzw/create-context-hook";
+import { useEffect, useMemo, useState } from "react";
+import { ref, onValue } from "firebase/database";
+import { database } from "@/config/firebase";
 import type {
   Driver,
   HpClass,
@@ -23,26 +26,7 @@ function parseSnapshot<T extends { id: string }>(
   })) as T[];
 }
 
-interface LeagueContextValue {
-  leagues: League[];
-  series: Series[];
-  hpClasses: HpClass[];
-  teams: Team[];
-  drivers: Driver[];
-  vehicles: Vehicle[];
-  events: LeagueEvent[];
-  rules: Rule[];
-  media: MediaItem[];
-  loading: boolean;
-  error: string | null;
-  driversMap: Record<string, Driver>;
-  teamsMap: Record<string, Team>;
-  seriesMap: Record<string, Series>;
-}
-
-const LeagueContext = createContext<LeagueContextValue | undefined>(undefined);
-
-export function LeagueProvider({ children }: { children: React.ReactNode }) {
+export const [LeagueProvider, useLeague] = createContextHook(() => {
   const [leagues, setLeagues] = useState<League[]>([]);
   const [series, setSeries] = useState<Series[]>([]);
   const [hpClasses, setHpClasses] = useState<HpClass[]>([]);
@@ -56,113 +40,90 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let unsubscribers: Array<() => void> = [];
-    let mounted = true;
+    const unsubscribers: Array<() => void> = [];
+    let loadedCount = 0;
 
-    const initListeners = async () => {
-      try {
-        const { database } = await import("@/config/firebase");
-        const { ref, onValue } = await import("firebase/database");
+    const collections: Array<{
+      path: string;
+      setter: (items: unknown[]) => void;
+    }> = [
+      { path: "leagues", setter: (d) => setLeagues(d as League[]) },
+      { path: "series", setter: (d) => setSeries(d as Series[]) },
+      { path: "hpClasses", setter: (d) => setHpClasses(d as HpClass[]) },
+      { path: "teams", setter: (d) => setTeams(d as Team[]) },
+      { path: "drivers", setter: (d) => setDrivers(d as Driver[]) },
+      { path: "vehicles", setter: (d) => setVehicles(d as Vehicle[]) },
+      { path: "events", setter: (d) => setEvents(d as LeagueEvent[]) },
+      { path: "rules", setter: (d) => setRules(d as Rule[]) },
+      { path: "media", setter: (d) => setMedia(d as MediaItem[]) },
+    ];
 
-        const collections: Array<{
-          path: string;
-          setter: (items: unknown[]) => void;
-        }> = [
-          { path: "leagues", setter: (d) => mounted && setLeagues(d as League[]) },
-          { path: "series", setter: (d) => mounted && setSeries(d as Series[]) },
-          { path: "hpClasses", setter: (d) => mounted && setHpClasses(d as HpClass[]) },
-          { path: "teams", setter: (d) => mounted && setTeams(d as Team[]) },
-          { path: "drivers", setter: (d) => mounted && setDrivers(d as Driver[]) },
-          { path: "vehicles", setter: (d) => mounted && setVehicles(d as Vehicle[]) },
-          { path: "events", setter: (d) => mounted && setEvents(d as LeagueEvent[]) },
-          { path: "rules", setter: (d) => mounted && setRules(d as Rule[]) },
-          { path: "media", setter: (d) => mounted && setMedia(d as MediaItem[]) },
-        ];
+    const total = collections.length;
 
-        let loadedCount = 0;
-        const total = collections.length;
-
-        for (const col of collections) {
-          const colRef = ref(database, `${DB_ROOT}/${col.path}`);
-          const unsub = onValue(
-            colRef,
-            (snap) => {
-              const data = snap.exists()
-                ? parseSnapshot(snap.val() as Record<string, unknown>)
-                : [];
-              col.setter(data);
-              loadedCount++;
-              if (mounted && loadedCount >= total) setLoading(false);
-              console.log(`[League] ${col.path} loaded: ${data.length} items`);
-            },
-            (err) => {
-              console.error(`[League] ${col.path} listener error:`, err);
-              if (mounted) {
-                setError(`Failed to load ${col.path}`);
-                loadedCount++;
-                if (loadedCount >= total) setLoading(false);
-              }
-            }
-          );
-          unsubscribers.push(unsub);
+    for (const col of collections) {
+      const colRef = ref(database, `${DB_ROOT}/${col.path}`);
+      const unsub = onValue(
+        colRef,
+        (snap) => {
+          const data = snap.exists()
+            ? parseSnapshot(snap.val() as Record<string, unknown>)
+            : [];
+          col.setter(data);
+          loadedCount++;
+          if (loadedCount >= total) setLoading(false);
+          console.log(`[League] ${col.path} loaded: ${data.length} items`);
+        },
+        (err) => {
+          console.error(`[League] ${col.path} error:`, err);
+          setError(`Failed to load ${col.path}`);
+          loadedCount++;
+          if (loadedCount >= total) setLoading(false);
         }
-      } catch (err) {
-        console.error("[League] Init error:", err);
-        if (mounted) {
-          setError("Failed to connect to League database");
-          setLoading(false);
-        }
-      }
-    };
-
-    void initListeners();
+      );
+      unsubscribers.push(unsub);
+    }
 
     return () => {
-      mounted = false;
       unsubscribers.forEach((fn) => fn());
       console.log("[League] All listeners detached");
     };
   }, []);
 
-  const driversMap: Record<string, Driver> = drivers.reduce(
-    (acc, d) => ({ ...acc, [d.id]: d }),
-    {}
-  );
-  const teamsMap: Record<string, Team> = teams.reduce(
-    (acc, t) => ({ ...acc, [t.id]: t }),
-    {}
-  );
-  const seriesMap: Record<string, Series> = series.reduce(
-    (acc, s) => ({ ...acc, [s.id]: s }),
-    {}
+  const driversMap = useMemo<Record<string, Driver>>(
+    () => drivers.reduce((acc, d) => ({ ...acc, [d.id]: d }), {}),
+    [drivers]
   );
 
-  const value: LeagueContextValue = {
-    leagues,
-    series,
-    hpClasses,
-    teams,
-    drivers,
-    vehicles,
-    events,
-    rules,
-    media,
-    loading,
-    error,
-    driversMap,
-    teamsMap,
-    seriesMap,
-  };
-
-  return (
-    <LeagueContext.Provider value={value}>
-      {children}
-    </LeagueContext.Provider>
+  const teamsMap = useMemo<Record<string, Team>>(
+    () => teams.reduce((acc, t) => ({ ...acc, [t.id]: t }), {}),
+    [teams]
   );
-}
 
-export function useLeague(): LeagueContextValue {
-  const ctx = useContext(LeagueContext);
-  if (!ctx) throw new Error("useLeague must be used within LeagueProvider");
-  return ctx;
-}
+  const seriesMap = useMemo<Record<string, Series>>(
+    () => series.reduce((acc, s) => ({ ...acc, [s.id]: s }), {}),
+    [series]
+  );
+
+  return useMemo(
+    () => ({
+      leagues,
+      series,
+      hpClasses,
+      teams,
+      drivers,
+      vehicles,
+      events,
+      rules,
+      media,
+      loading,
+      error,
+      driversMap,
+      teamsMap,
+      seriesMap,
+    }),
+    [
+      leagues, series, hpClasses, teams, drivers, vehicles,
+      events, rules, media, loading, error, driversMap, teamsMap, seriesMap,
+    ]
+  );
+});
