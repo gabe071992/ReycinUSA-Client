@@ -6,10 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
 } from "react-native";
-import { ArrowLeft, BookOpen } from "lucide-react-native";
+import { ArrowLeft, BookOpen, ChevronRight } from "lucide-react-native";
 import EventSchedule from "@/app/(tabs)/race/league/EventSchedule";
 import DriverStandings from "@/app/(tabs)/race/league/DriverStandings";
 import TeamStandings from "@/app/(tabs)/race/league/TeamStandings";
+import RuleSection from "@/components/league/RuleSection";
 import { useLeague } from "@/providers/LeagueProvider";
 
 type SeriesTab = "schedule" | "standings" | "rules";
@@ -20,6 +21,9 @@ interface SeriesDetailProps {
   leagueId: string;
   onBack: () => void;
   onSelectEvent: (eventId: string) => void;
+  onSelectDriver?: (driverId: string) => void;
+  onSelectTeam?: (teamId: string) => void;
+  onSelectRules?: (seriesId: string) => void;
 }
 
 export default function SeriesDetail({
@@ -27,6 +31,9 @@ export default function SeriesDetail({
   leagueId,
   onBack,
   onSelectEvent,
+  onSelectDriver,
+  onSelectTeam,
+  onSelectRules,
 }: SeriesDetailProps) {
   const { seriesMap, hpClasses, events, rules } = useLeague();
   const [activeTab, setActiveTab] = useState<SeriesTab>("schedule");
@@ -170,28 +177,43 @@ export default function SeriesDetail({
             </View>
             <View style={styles.standingsContent}>
               {standingsTab === "drivers" ? (
-                <DriverStandings seriesId={seriesId} />
+                <DriverStandings
+                  seriesId={seriesId}
+                  onSelectDriver={onSelectDriver}
+                />
               ) : (
-                <TeamStandings seriesId={seriesId} />
+                <TeamStandings
+                  seriesId={seriesId}
+                  onSelectTeam={onSelectTeam}
+                />
               )}
             </View>
           </View>
         )}
 
         {activeTab === "rules" && (
-          <RulesTab rules={seriesRules} hpClasses={seriesHpClasses} />
+          <RulesInlineTab
+            seriesId={seriesId}
+            rules={seriesRules}
+            hpClasses={seriesHpClasses}
+            onSelectRules={onSelectRules}
+          />
         )}
       </View>
     </View>
   );
 }
 
-function RulesTab({
+function RulesInlineTab({
+  seriesId,
   rules,
   hpClasses,
+  onSelectRules,
 }: {
+  seriesId: string;
   rules: ReturnType<typeof useLeague>["rules"];
   hpClasses: ReturnType<typeof useLeague>["hpClasses"];
+  onSelectRules?: (seriesId: string) => void;
 }) {
   const grouped = useMemo(() => {
     const map: Record<string, typeof rules> = {};
@@ -215,44 +237,29 @@ function RulesTab({
   }
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-      {hpClasses.length > 0 && (
-        <View style={styles.ruleSection}>
-          <Text style={styles.ruleCategoryHeader}>HP CLASSES</Text>
-          {hpClasses.map((cls) => (
-            <View key={cls.id} style={styles.ruleCard}>
-              <View style={styles.classBadgeLarge}>
-                <Text style={styles.classBadgeLargeText}>{cls.label}</Text>
-              </View>
-              <View style={styles.ruleClassStats}>
-                <Text style={styles.ruleClassStat}>
-                  {cls.minHp} – {cls.maxHp} HP
-                </Text>
-                <Text style={styles.ruleClassStat}>Min {cls.weightMin} lbs</Text>
-              </View>
-              {!!cls.additionalRules && (
-                <Text style={styles.ruleBody}>{cls.additionalRules}</Text>
-              )}
-            </View>
-          ))}
-        </View>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 32 }}
+    >
+      {onSelectRules && (
+        <TouchableOpacity
+          style={styles.fullRulesBtn}
+          onPress={() => onSelectRules(seriesId)}
+          activeOpacity={0.75}
+          testID="view-full-rules-btn"
+        >
+          <BookOpen size={12} color="#4A90D9" strokeWidth={2} />
+          <Text style={styles.fullRulesBtnText}>BROWSE FULL RULE BOOK</Text>
+          <ChevronRight size={12} color="#4A90D9" strokeWidth={2} />
+        </TouchableOpacity>
       )}
+
+      {hpClasses.length > 0 && (
+        <RuleSection category="HP Classes" rules={[]} hpClasses={hpClasses} />
+      )}
+
       {Object.entries(grouped).map(([category, catRules]) => (
-        <View key={category} style={styles.ruleSection}>
-          <Text style={styles.ruleCategoryHeader}>{category.toUpperCase()}</Text>
-          {catRules.map((rule) => (
-            <View key={rule.id} style={styles.ruleCard}>
-              <View style={styles.ruleTitleRow}>
-                <Text style={styles.ruleTitle}>{rule.title}</Text>
-                <Text style={styles.ruleVersion}>v{rule.version}</Text>
-              </View>
-              <Text style={styles.ruleEffective}>
-                Effective {rule.effectiveDate}
-              </Text>
-              <Text style={styles.ruleBody}>{rule.body}</Text>
-            </View>
-          ))}
-        </View>
+        <RuleSection key={category} category={category} rules={catRules} />
       ))}
     </ScrollView>
   );
@@ -392,80 +399,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
   },
-  ruleSection: {
-    marginTop: 6,
-  },
-  ruleCategoryHeader: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#333",
-    letterSpacing: 2,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  ruleCard: {
-    marginHorizontal: 14,
-    marginBottom: 8,
-    backgroundColor: "#080808",
-    borderWidth: 1,
-    borderColor: "#111",
-    borderRadius: 10,
-    padding: 14,
-    gap: 7,
-  },
-  ruleTitleRow: {
+  fullRulesBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: 8,
-  },
-  ruleTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFF",
-    letterSpacing: -0.1,
-  },
-  ruleVersion: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#333",
-    fontVariant: ["tabular-nums"] as const,
-  },
-  ruleEffective: {
-    fontSize: 10,
-    color: "#333",
-    fontStyle: "italic" as const,
-  },
-  ruleBody: {
-    fontSize: 12,
-    color: "#666",
-    lineHeight: 18,
-  },
-  classBadgeLarge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(74,144,217,0.08)",
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 4,
+    backgroundColor: "rgba(74,144,217,0.06)",
     borderWidth: 1,
     borderColor: "#0d1f30",
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 5,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
-  classBadgeLargeText: {
-    fontSize: 11,
+  fullRulesBtnText: {
+    flex: 1,
+    fontSize: 10,
     fontWeight: "700",
     color: "#4A90D9",
-    letterSpacing: 0.5,
-  },
-  ruleClassStats: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  ruleClassStat: {
-    fontSize: 12,
-    color: "#FFF",
-    fontVariant: ["tabular-nums"] as const,
-    fontWeight: "600",
+    letterSpacing: 1.5,
   },
 });

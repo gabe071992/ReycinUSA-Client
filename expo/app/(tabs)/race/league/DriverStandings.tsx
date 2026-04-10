@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, FlatList } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from "react-native";
 import { Award } from "lucide-react-native";
 import StandingsRow from "@/components/league/StandingsRow";
 import { useLeague } from "@/providers/LeagueProvider";
@@ -7,9 +7,10 @@ import { computeDriverStandings } from "@/types/league";
 
 interface DriverStandingsProps {
   seriesId: string;
+  onSelectDriver?: (driverId: string) => void;
 }
 
-export default function DriverStandings({ seriesId }: DriverStandingsProps) {
+export default function DriverStandings({ seriesId, onSelectDriver }: DriverStandingsProps) {
   const { events, driversMap, teamsMap } = useLeague();
 
   const standings = useMemo(
@@ -54,6 +55,27 @@ export default function DriverStandings({ seriesId }: DriverStandingsProps) {
           ? `${driver.firstName} ${driver.lastName}`
           : `Driver #${item.driverId.slice(-4)}`;
         const subLabel = team ? team.name : undefined;
+
+        if (onSelectDriver) {
+          return (
+            <TouchableOpacity
+              onPress={() => onSelectDriver(item.driverId)}
+              activeOpacity={0.75}
+              testID={`driver-standings-row-${item.driverId}`}
+            >
+              <StandingsRow
+                rank={index + 1}
+                name={driverName}
+                subLabel={subLabel}
+                points={item.points}
+                bonusPoints={item.bonusPoints}
+                wins={item.wins}
+                podiums={item.podiums}
+                dnfs={item.dnfs}
+              />
+            </TouchableOpacity>
+          );
+        }
 
         return (
           <StandingsRow

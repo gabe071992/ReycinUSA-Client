@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, FlatList } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from "react-native";
 import { Wrench } from "lucide-react-native";
 import StandingsRow from "@/components/league/StandingsRow";
 import { useLeague } from "@/providers/LeagueProvider";
@@ -7,9 +7,10 @@ import { computeTeamStandings } from "@/types/league";
 
 interface TeamStandingsProps {
   seriesId: string;
+  onSelectTeam?: (teamId: string) => void;
 }
 
-export default function TeamStandings({ seriesId }: TeamStandingsProps) {
+export default function TeamStandings({ seriesId, onSelectTeam }: TeamStandingsProps) {
   const { events, driversMap, teamsMap } = useLeague();
 
   const standings = useMemo(
@@ -50,13 +51,37 @@ export default function TeamStandings({ seriesId }: TeamStandingsProps) {
       renderItem={({ item, index }) => {
         const team = teamsMap[item.teamId];
         const teamName = team ? team.name : `Team #${item.teamId.slice(-4)}`;
-        const subLabel = team ? `${team.city}, ${team.state}`.replace(/, $/, "").trim() : undefined;
+        const rawSub = team
+          ? [team.city, team.state].filter(Boolean).join(", ")
+          : undefined;
+        const subLabel = rawSub && rawSub !== ", " ? rawSub : undefined;
+
+        if (onSelectTeam) {
+          return (
+            <TouchableOpacity
+              onPress={() => onSelectTeam(item.teamId)}
+              activeOpacity={0.75}
+              testID={`team-standings-row-${item.teamId}`}
+            >
+              <StandingsRow
+                rank={index + 1}
+                name={teamName}
+                subLabel={subLabel}
+                points={item.points}
+                bonusPoints={item.bonusPoints}
+                wins={item.wins}
+                podiums={item.podiums}
+                dnfs={item.dnfs}
+              />
+            </TouchableOpacity>
+          );
+        }
 
         return (
           <StandingsRow
             rank={index + 1}
             name={teamName}
-            subLabel={subLabel !== ", " ? subLabel : undefined}
+            subLabel={subLabel}
             points={item.points}
             bonusPoints={item.bonusPoints}
             wins={item.wins}

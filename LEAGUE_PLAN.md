@@ -77,27 +77,27 @@ reycinUSA/works/league/
 ### Phase 1 — Foundation & Browse
 **Goal**: Users can browse leagues, see series, and check the upcoming schedule.
 
-- [ ] Create `expo/types/league.ts` — all TypeScript interfaces
-- [ ] Create `expo/providers/LeagueProvider.tsx` — Firebase `onValue` listeners for all collections
-- [ ] Wrap root layout with `LeagueProvider`
-- [ ] `LeagueHome.tsx` — active leagues list with logo + season badge
-- [ ] `SeriesDetail.tsx` — series info with inner tab strip (Schedule / Standings / Rules)
-- [ ] `EventSchedule.tsx` — upcoming events list, sorted by date
+- [x] Create `expo/types/league.ts` — all TypeScript interfaces
+- [x] Create `expo/providers/LeagueProvider.tsx` — Firebase `onValue` listeners for all collections
+- [x] Wrap root layout with `LeagueProvider`
+- [x] `LeagueHome.tsx` — active leagues list with logo + season badge
+- [x] `SeriesDetail.tsx` — series info with inner tab strip (Schedule / Standings / Rules)
+- [x] `EventSchedule.tsx` — upcoming events list, sorted by date
 
 ### Phase 2 — Results & Standings
 **Goal**: Users can view completed race results and the live championship standings.
 
-- [ ] `EventResults.tsx` — results table with position, driver, time, bonus icons 🏁⚡📈🧹
-- [ ] `DriverStandings.tsx` — ARC points table, wins/podiums/DNFs columns, "+N" bonus chip
-- [ ] `TeamStandings.tsx` — Mechanics Cup table, per-event team bonuses computed client-side
+- [x] `EventResults.tsx` — results table with position, driver, time, bonus icons 🏁⚡📈🧹
+- [x] `DriverStandings.tsx` — ARC points table, wins/podiums/DNFs columns, "+N" bonus chip
+- [x] `TeamStandings.tsx` — Mechanics Cup table, per-event team bonuses computed client-side
 
 ### Phase 3 — Profiles, Rules & Media
 **Goal**: Full content depth — team pages, driver cards, rule book, and video streaming.
 
-- [ ] `TeamProfile.tsx` — team bio, roster, vehicles list
-- [ ] `DriverProfile.tsx` — driver headshot, stats, car number, license class
-- [ ] `RulesBrowser.tsx` — rules grouped by category, markdown body rendered
-- [ ] `WatchScreen.tsx` — video thumbnail grid, native mp4 player
+- [x] `TeamProfile.tsx` — team bio, roster, vehicles list
+- [x] `DriverProfile.tsx` — driver headshot, stats, car number, license class
+- [x] `RulesBrowser.tsx` — rules grouped by category, markdown body rendered
+- [x] `WatchScreen.tsx` — video thumbnail grid, native mp4 player
 
 ---
 
@@ -851,40 +851,38 @@ Add to your Firebase database rules JSON to support filtered queries:
 ## 12. Implementation Checklist
 
 ### Phase 1 — Foundation & Browse
-- [ ] `expo/types/league.ts` — all TypeScript interfaces + computation types
-- [ ] `expo/providers/LeagueProvider.tsx` — Firebase onValue listeners + selector hooks
-- [ ] Add `LeagueProvider` to `expo/app/_layout.tsx`
-- [ ] `expo/components/league/ClassBadge.tsx`
-- [ ] `expo/components/league/LeagueHero.tsx`
-- [ ] `expo/components/league/SeriesCard.tsx`
-- [ ] `expo/components/league/EventCard.tsx`
-- [ ] `expo/app/(tabs)/race/league/LeagueScreen.tsx` — view state manager
-- [ ] `expo/app/(tabs)/race/league/LeagueHome.tsx`
-- [ ] `expo/app/(tabs)/race/league/SeriesDetail.tsx`
-- [ ] `expo/app/(tabs)/race/league/EventSchedule.tsx`
-- [ ] Add `"league"` to `RaceTab` type and `RACE_TABS` in `race/index.tsx`
+- [x] `expo/types/league.ts` — all TypeScript interfaces + computation types
+- [x] `expo/providers/LeagueProvider.tsx` — Firebase onValue listeners + selector hooks
+- [x] Add `LeagueProvider` to `expo/app/_layout.tsx`
+- [x] `expo/components/league/LeagueHero.tsx`
+- [x] `expo/components/league/SeriesCard.tsx`
+- [x] `expo/components/league/EventCard.tsx`
+- [x] `expo/app/(tabs)/race/league/LeagueModule.tsx` — stack-based nav manager
+- [x] `expo/app/(tabs)/race/league/LeagueHome.tsx`
+- [x] `expo/app/(tabs)/race/league/SeriesDetail.tsx`
+- [x] `expo/app/(tabs)/race/league/EventSchedule.tsx`
+- [x] Add `"league"` to `RaceTab` type and `RACE_TABS` in `race/index.tsx`
 
 ### Phase 2 — Results & Standings
-- [ ] `expo/components/league/BonusIcon.tsx`
-- [ ] `expo/components/league/ResultRow.tsx`
-- [ ] `expo/components/league/StandingsRow.tsx`
-- [ ] `expo/app/(tabs)/race/league/EventResults.tsx`
-- [ ] `expo/app/(tabs)/race/league/DriverStandings.tsx`
-- [ ] `expo/app/(tabs)/race/league/TeamStandings.tsx`
+- [x] `expo/components/league/BonusIcon.tsx`
+- [x] `expo/components/league/ResultRow.tsx`
+- [x] `expo/components/league/StandingsRow.tsx`
+- [x] `expo/app/(tabs)/race/league/EventResults.tsx`
+- [x] `expo/app/(tabs)/race/league/DriverStandings.tsx` — tappable rows → DriverProfile
+- [x] `expo/app/(tabs)/race/league/TeamStandings.tsx` — tappable rows → TeamProfile
 
 ### Phase 3 — Profiles, Rules & Media
-- [ ] `expo/components/league/DriverCard.tsx`
-- [ ] `expo/components/league/VehicleCard.tsx`
-- [ ] `expo/components/league/RuleSection.tsx`
-- [ ] `expo/components/league/VideoThumbnailCard.tsx`
-- [ ] `expo/app/(tabs)/race/league/TeamProfile.tsx`
-- [ ] `expo/app/(tabs)/race/league/DriverProfile.tsx`
-- [ ] `expo/app/(tabs)/race/league/RulesBrowser.tsx`
-- [ ] `expo/app/(tabs)/race/league/WatchScreen.tsx`
+- [x] `expo/components/league/DriverCard.tsx`
+- [x] `expo/components/league/VehicleCard.tsx`
+- [x] `expo/components/league/RuleSection.tsx`
+- [x] `expo/components/league/VideoThumbnailCard.tsx`
+- [x] `expo/app/(tabs)/race/league/TeamProfile.tsx`
+- [x] `expo/app/(tabs)/race/league/DriverProfile.tsx`
+- [x] `expo/app/(tabs)/race/league/RulesBrowser.tsx`
+- [x] `expo/app/(tabs)/race/league/WatchScreen.tsx`
 
 ### Cross-cutting
 - [ ] Firebase RTDB indexes added to database rules
-- [ ] Error boundaries on LeagueScreen for Firebase failures
-- [ ] Loading skeletons on all list screens
-- [ ] Empty state placeholders on all screens
-- [ ] Web compatibility check (Platform guards for video player)
+- [x] Empty state placeholders on all screens
+- [x] Web compatibility check (Linking.openURL for video — no native-only APIs)
+- [x] Stack-based back navigation across all screens

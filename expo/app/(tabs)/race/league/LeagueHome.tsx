@@ -5,18 +5,23 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import { Trophy } from "lucide-react-native";
+import { Trophy, Tv2 } from "lucide-react-native";
 import LeagueHero from "@/components/league/LeagueHero";
 import SeriesCard from "@/components/league/SeriesCard";
 import { useLeague } from "@/providers/LeagueProvider";
 
 interface LeagueHomeProps {
   onSelectSeries: (seriesId: string, leagueId: string) => void;
+  onSelectWatch?: (leagueId: string) => void;
 }
 
-export default function LeagueHome({ onSelectSeries }: LeagueHomeProps) {
-  const { leagues, series, events, loading, error } = useLeague();
+export default function LeagueHome({
+  onSelectSeries,
+  onSelectWatch,
+}: LeagueHomeProps) {
+  const { leagues, series, events, media, loading, error } = useLeague();
 
   const activeLeagues = useMemo(
     () => leagues.filter((l) => l.status === "active"),
@@ -68,9 +73,29 @@ export default function LeagueHome({ onSelectSeries }: LeagueHomeProps) {
 
       {activeLeagues.map((league) => {
         const leagueSeries = series.filter((s) => s.leagueId === league.id);
+        const hasVideos = media.some(
+          (m) => m.leagueId === league.id && m.type === "video"
+        );
+
         return (
           <View key={league.id} style={styles.leagueBlock}>
             <LeagueHero league={league} />
+
+            {onSelectWatch && (
+              <TouchableOpacity
+                style={styles.watchBtn}
+                onPress={() => onSelectWatch(league.id)}
+                activeOpacity={0.75}
+                testID={`watch-btn-${league.id}`}
+              >
+                <View style={styles.watchIconWrap}>
+                  <Tv2 size={12} color="#FF1801" strokeWidth={2} />
+                </View>
+                <Text style={styles.watchBtnText}>WATCH VIDEOS</Text>
+                {hasVideos && <View style={styles.watchDot} />}
+              </TouchableOpacity>
+            )}
+
             {leagueSeries.length === 0 ? (
               <View style={styles.noSeries}>
                 <Text style={styles.noSeriesText}>No series configured</Text>
@@ -163,6 +188,41 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderTopWidth: 1,
     borderTopColor: "#0d0d0d",
+  },
+  watchBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: "rgba(255,24,1,0.05)",
+    borderWidth: 1,
+    borderColor: "#2a0a0a",
+    borderRadius: 9,
+  },
+  watchIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,24,1,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  watchBtnText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FF1801",
+    letterSpacing: 1.5,
+  },
+  watchDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#FF1801",
   },
   noSeries: {
     paddingHorizontal: 16,
