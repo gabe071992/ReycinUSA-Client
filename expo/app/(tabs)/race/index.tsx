@@ -38,6 +38,7 @@ import {
   Timer,
 } from "lucide-react-native";
 import TuningConsole from "@/app/(tabs)/race/tuning";
+import LeagueModule from "@/app/(tabs)/race/league/LeagueModule";
 import { useOBD } from "@/providers/OBDProvider";
 import { useLapTimer } from "@/providers/LapTimerProvider";
 import { usePIT } from "@/providers/PITProvider";
@@ -45,7 +46,7 @@ import type { MsgPriority, PitLogType } from "@/providers/PITProvider";
 import { useTracks } from "@/providers/TracksProvider";
 import type { Track, TrackCoordinate, TrackWaypoint } from "@/providers/TracksProvider";
 
-type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit";
+type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit" | "league";
 
 
 
@@ -3317,6 +3318,7 @@ const RACE_TABS: { id: RaceTab; label: string; short: string }[] = [
   { id: "tracks", label: "Tracks", short: "TRACKS" },
   { id: "tuning", label: "Tuning", short: "TUNING" },
   { id: "pit", label: "PIT", short: "PIT" },
+  { id: "league", label: "League", short: "LEAGUE" },
 ];
 
 export default function RaceScreen() {
@@ -3349,6 +3351,8 @@ export default function RaceScreen() {
         return <TuningConsole />;
       case "pit":
         return <PITScreen />;
+      case "league":
+        return <LeagueModule />;
     }
   };
 

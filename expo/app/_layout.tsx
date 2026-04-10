@@ -10,6 +10,7 @@ import { LapTimerProvider } from "@/providers/LapTimerProvider";
 import { PITProvider } from "@/providers/PITProvider";
 import { TracksProvider } from "@/providers/TracksProvider";
 import { BRGAuthProvider } from "@/providers/BRGAuthProvider";
+import { LeagueProvider } from "@/providers/LeagueProvider";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -57,7 +58,9 @@ export default function RootLayout() {
                 <LapTimerProvider>
                   <TracksProvider>
                     <PITProvider>
-                      <RootLayoutNav />
+                      <LeagueProvider>
+                        <RootLayoutNav />
+                      </LeagueProvider>
                     </PITProvider>
                   </TracksProvider>
                 </LapTimerProvider>
