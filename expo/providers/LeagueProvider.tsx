@@ -1,5 +1,4 @@
-import createContextHook from "@nkzw/create-context-hook";
-import { useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import type {
   Driver,
   HpClass,
@@ -24,7 +23,26 @@ function parseSnapshot<T extends { id: string }>(
   })) as T[];
 }
 
-export const [LeagueProvider, useLeague] = createContextHook(() => {
+interface LeagueContextValue {
+  leagues: League[];
+  series: Series[];
+  hpClasses: HpClass[];
+  teams: Team[];
+  drivers: Driver[];
+  vehicles: Vehicle[];
+  events: LeagueEvent[];
+  rules: Rule[];
+  media: MediaItem[];
+  loading: boolean;
+  error: string | null;
+  driversMap: Record<string, Driver>;
+  teamsMap: Record<string, Team>;
+  seriesMap: Record<string, Series>;
+}
+
+const LeagueContext = createContext<LeagueContextValue | undefined>(undefined);
+
+export function LeagueProvider({ children }: { children: React.ReactNode }) {
   const [leagues, setLeagues] = useState<League[]>([]);
   const [series, setSeries] = useState<Series[]>([]);
   const [hpClasses, setHpClasses] = useState<HpClass[]>([]);
@@ -50,42 +68,15 @@ export const [LeagueProvider, useLeague] = createContextHook(() => {
           path: string;
           setter: (items: unknown[]) => void;
         }> = [
-          {
-            path: "leagues",
-            setter: (d) => mounted && setLeagues(d as League[]),
-          },
-          {
-            path: "series",
-            setter: (d) => mounted && setSeries(d as Series[]),
-          },
-          {
-            path: "hpClasses",
-            setter: (d) => mounted && setHpClasses(d as HpClass[]),
-          },
-          {
-            path: "teams",
-            setter: (d) => mounted && setTeams(d as Team[]),
-          },
-          {
-            path: "drivers",
-            setter: (d) => mounted && setDrivers(d as Driver[]),
-          },
-          {
-            path: "vehicles",
-            setter: (d) => mounted && setVehicles(d as Vehicle[]),
-          },
-          {
-            path: "events",
-            setter: (d) => mounted && setEvents(d as LeagueEvent[]),
-          },
-          {
-            path: "rules",
-            setter: (d) => mounted && setRules(d as Rule[]),
-          },
-          {
-            path: "media",
-            setter: (d) => mounted && setMedia(d as MediaItem[]),
-          },
+          { path: "leagues", setter: (d) => mounted && setLeagues(d as League[]) },
+          { path: "series", setter: (d) => mounted && setSeries(d as Series[]) },
+          { path: "hpClasses", setter: (d) => mounted && setHpClasses(d as HpClass[]) },
+          { path: "teams", setter: (d) => mounted && setTeams(d as Team[]) },
+          { path: "drivers", setter: (d) => mounted && setDrivers(d as Driver[]) },
+          { path: "vehicles", setter: (d) => mounted && setVehicles(d as Vehicle[]) },
+          { path: "events", setter: (d) => mounted && setEvents(d as LeagueEvent[]) },
+          { path: "rules", setter: (d) => mounted && setRules(d as Rule[]) },
+          { path: "media", setter: (d) => mounted && setMedia(d as MediaItem[]) },
         ];
 
         let loadedCount = 0;
@@ -97,15 +88,11 @@ export const [LeagueProvider, useLeague] = createContextHook(() => {
             colRef,
             (snap) => {
               const data = snap.exists()
-                ? parseSnapshot(
-                    snap.val() as Record<string, unknown>
-                  )
+                ? parseSnapshot(snap.val() as Record<string, unknown>)
                 : [];
               col.setter(data);
               loadedCount++;
-              if (mounted && loadedCount >= total) {
-                setLoading(false);
-              }
+              if (mounted && loadedCount >= total) setLoading(false);
               console.log(`[League] ${col.path} loaded: ${data.length} items`);
             },
             (err) => {
@@ -150,7 +137,7 @@ export const [LeagueProvider, useLeague] = createContextHook(() => {
     {}
   );
 
-  return {
+  const value: LeagueContextValue = {
     leagues,
     series,
     hpClasses,
@@ -166,4 +153,16 @@ export const [LeagueProvider, useLeague] = createContextHook(() => {
     teamsMap,
     seriesMap,
   };
-});
+
+  return (
+    <LeagueContext.Provider value={value}>
+      {children}
+    </LeagueContext.Provider>
+  );
+}
+
+export function useLeague(): LeagueContextValue {
+  const ctx = useContext(LeagueContext);
+  if (!ctx) throw new Error("useLeague must be used within LeagueProvider");
+  return ctx;
+}
