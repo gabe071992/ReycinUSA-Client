@@ -393,7 +393,7 @@ bool hasConnectedRole(const char* role) {
 }
 
 // Gap 7 — Route message to all clients matching a role
-void broadcastToRole(const char* role, const String& json) {
+void broadcastToRole(const char* role, String json) {
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
     if (clients[i].connected && strcmp(clients[i].role, role) == 0) {
       pitServer.sendTXT(clients[i].num, json);
@@ -403,7 +403,7 @@ void broadcastToRole(const char* role, const String& json) {
 }
 
 // Send to all connected registered clients regardless of role
-void broadcastToAll(const String& json) {
+void broadcastToAll(String json) {
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
     if (clients[i].connected && strlen(clients[i].role) > 0) {
       pitServer.sendTXT(clients[i].num, json);
@@ -412,7 +412,7 @@ void broadcastToAll(const String& json) {
   flashLED(LED_PIT_TX);
 }
 
-void sendToClient(uint8_t num, const String& json) {
+void sendToClient(uint8_t num, String json) {
   pitServer.sendTXT(num, json);
   flashLED(LED_PIT_TX);
 }
@@ -1082,7 +1082,7 @@ void updateMarshalRecordByName(const char* id) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  FLAG STATE
 // ─────────────────────────────────────────────────────────────────────────────
-void setFlag(const String& flag) {
+void setFlag(String flag) {
   if      (flag == "green")      currentFlag = FLAG_GREEN;
   else if (flag == "yellow")     currentFlag = FLAG_YELLOW;
   else if (flag == "red")        currentFlag = FLAG_RED;
