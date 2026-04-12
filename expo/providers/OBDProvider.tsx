@@ -303,13 +303,15 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
   }, []);
 
   const disconnect = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
     if (reconnectTimer.current) {
       clearTimeout(reconnectTimer.current);
       reconnectTimer.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.close();
+      wsRef.current = null;
     }
     setConnectionStatus("disconnected");
     setConnectionType(null);
@@ -321,20 +323,34 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
   useEffect(() => {
     const openWS = (type: ConnectionType) => {
       if (!type) return;
+
+      // Tear down any existing socket cleanly before opening a new one
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+
       if (type === "wifi") {
-        console.log("[OBD] Opening WebSocket to ESP32 AP...");
+        console.log("[OBD] Opening WebSocket — ws://192.168.4.1:81");
         const ws = new WebSocket("ws://192.168.4.1:81");
+        let didOpen = false;
+
+        // Assign immediately so disconnect() can close a pending socket
+        wsRef.current = ws;
+
         ws.onopen = () => {
           console.log("[OBD] WebSocket connected");
+          didOpen = true;
           setConnectionStatus("connected");
-          wsRef.current = ws;
-          // Request status immediately to learn OBD + GPS state
           setTimeout(() => {
             if (wsRef.current?.readyState === WebSocket.OPEN) {
               wsRef.current.send(JSON.stringify({ command: "get_status" }));
             }
           }, 500);
         };
+
         ws.onmessage = (event) => {
           try {
             handleMessage(JSON.parse(event.data));
@@ -342,15 +358,29 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
             console.error("[OBD] Parse error:", e);
           }
         };
-        ws.onerror = () => {
-          console.warn("[OBD] WebSocket error");
-          setConnectionStatus("error");
+
+        ws.onerror = (e) => {
+          // onclose always fires after onerror — handle status there to avoid double-set
+          console.warn("[OBD] WebSocket error event", e);
         };
-        ws.onclose = () => {
-          console.log("[OBD] WebSocket closed");
-          setConnectionStatus("disconnected");
+
+        ws.onclose = (e) => {
+          console.log("[OBD] WebSocket closed — code:", e.code, "didOpen:", didOpen);
           wsRef.current = null;
-          scheduleReconnect();
+          if (didOpen) {
+            // Had a live session that dropped — try to auto-reconnect
+            console.log("[OBD] Connection dropped — scheduling reconnect");
+            setConnectionStatus("disconnected");
+            scheduleReconnect();
+          } else {
+            // Never reached onopen — surface error so user can retry
+            console.warn(
+              "[OBD] Connection never established — code:",
+              e.code,
+              "| Verify device is on Reycin_VEH_ WiFi and disable mobile data"
+            );
+            setConnectionStatus("error");
+          }
         };
       } else if (type === "ble" || type === "usb") {
         console.log(`[OBD] ${type} not yet implemented`);
@@ -362,6 +392,11 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
 
   const connect = useCallback(async (type: ConnectionType) => {
     if (!type) return;
+    // Cancel any scheduled reconnect before a fresh manual connect
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
     setConnectionType(type);
     setConnectionStatus("connecting");
     try {
@@ -369,9 +404,8 @@ export const [OBDProvider, useOBD] = createContextHook(() => {
     } catch (error) {
       console.error("[OBD] Connection failed:", error);
       setConnectionStatus("error");
-      scheduleReconnect();
     }
-  }, [scheduleReconnect]);
+  }, []);
 
   useEffect(() => {
     return () => { disconnect(); };

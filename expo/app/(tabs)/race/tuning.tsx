@@ -255,7 +255,7 @@ function ConnectionBanner({
   onConnect: () => void;
   onDisconnect: () => void;
 }) {
-  const { connectionStatus, firmwareVersion, isConnected } = useOBD();
+  const { connectionStatus, firmwareVersion, firmwareObdState, isConnected } = useOBD();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -280,19 +280,24 @@ function ConnectionBanner({
   const statusLabel =
     connectionStatus === "connected" ? "CONNECTED" :
     connectionStatus === "connecting" ? "CONNECTING…" :
-    connectionStatus === "error" ? "ERROR" : "DISCONNECTED";
+    connectionStatus === "error" ? "NO RESPONSE" : "DISCONNECTED";
+
+  const subLabel = isConnected
+    ? firmwareObdState === "absent"
+      ? `FW ${firmwareVersion ?? "—"}  ·  OBD ABSENT — GPS/Telemetry only`
+      : `FW ${firmwareVersion ?? "—"}  ·  192.168.4.1:81`
+    : connectionStatus === "error"
+    ? "Ensure phone is on Reycin_VEH_ WiFi · Disable mobile data"
+    : "ws://192.168.4.1:81";
 
   return (
     <View style={bannerStyles.root}>
       <Animated.View style={[bannerStyles.dot, { backgroundColor: statusColor, opacity: pulseAnim }]} />
       <View style={bannerStyles.info}>
         <Text style={[bannerStyles.status, { color: statusColor }]}>{statusLabel}</Text>
-        {firmwareVersion && isConnected && (
-          <Text style={bannerStyles.fw}>FW {firmwareVersion}  ·  192.168.4.1:81</Text>
-        )}
-        {!isConnected && (
-          <Text style={bannerStyles.fw}>ws://192.168.4.1:81</Text>
-        )}
+        <Text style={[bannerStyles.fw, connectionStatus === "error" && bannerStyles.fwError]} numberOfLines={1}>
+          {subLabel}
+        </Text>
       </View>
       {isConnected ? (
         <TouchableOpacity style={bannerStyles.btnDanger} onPress={onDisconnect} activeOpacity={0.75}>
@@ -308,7 +313,8 @@ function ConnectionBanner({
         >
           <Wifi size={12} color="#000" strokeWidth={2} />
           <Text style={bannerStyles.btnConnectText}>
-            {connectionStatus === "connecting" ? "CONNECTING…" : "CONNECT"}
+            {connectionStatus === "connecting" ? "CONNECTING…" :
+             connectionStatus === "error" ? "RETRY" : "CONNECT"}
           </Text>
         </TouchableOpacity>
       )}
