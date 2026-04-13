@@ -126,7 +126,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={product.id}
                   style={styles.productCard}
-                  onPress={() => {}}
+                  onPress={() => router.push({ pathname: '/(tabs)/shop/product/[id]', params: { id: product.id } })}
                 >
                   <Image
                     source={{ uri: product.media?.[0] || "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&h=400&fit=crop" }}
@@ -151,11 +151,11 @@ export default function HomeScreen() {
           <View style={styles.actionsGrid}>
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => router.push('/(tabs)/obd')}
+              onPress={() => router.push({ pathname: '/(tabs)/race', params: { initialTab: 'league' } })}
             >
-              <Text style={styles.actionIcon}>🔧</Text>
-              <Text style={styles.actionTitle}>Diagnostics</Text>
-              <Text style={styles.actionDescription}>Connect to OBD</Text>
+              <Text style={styles.actionIcon}>📺</Text>
+              <Text style={styles.actionTitle}>Watch</Text>
+              <Text style={styles.actionDescription}>Leagues Library</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -178,11 +178,11 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => router.push({ pathname: '/(tabs)/shop/category/[id]', params: { id: 'warranty' } })}
+              onPress={() => router.push('/(tabs)/race')}
             >
-              <Text style={styles.actionIcon}>📋</Text>
-              <Text style={styles.actionTitle}>Warranty</Text>
-              <Text style={styles.actionDescription}>View Plans</Text>
+              <Text style={styles.actionIcon}>🏎️</Text>
+              <Text style={styles.actionTitle}>Race</Text>
+              <Text style={styles.actionDescription}>Open Dashboard</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -91,7 +91,7 @@ export default function LeagueHome({
                 <View style={styles.watchIconWrap}>
                   <Tv2 size={12} color="#FF1801" strokeWidth={2} />
                 </View>
-                <Text style={styles.watchBtnText}>WATCH VIDEOS</Text>
+                <Text style={styles.watchBtnText}>LEAGUES LIBRARY</Text>
                 {hasVideos && <View style={styles.watchDot} />}
               </TouchableOpacity>
             )}

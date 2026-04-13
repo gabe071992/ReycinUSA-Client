@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as NavigationBar from "expo-navigation-bar";
 import React, { useEffect } from "react";
+import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { CartProvider } from "@/providers/CartProvider";
@@ -46,6 +48,12 @@ export default function RootLayout() {
     setTimeout(() => {
       void SplashScreen.hideAsync();
     }, 1500);
+
+    if (Platform.OS === "android") {
+      void NavigationBar.setVisibilityAsync("hidden");
+      void NavigationBar.setBehaviorAsync("overlay-swipe");
+      console.log("[NavBar] Android navigation bar set to hidden / overlay-swipe");
+    }
   }, []);
 
   return (

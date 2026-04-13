@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   View,
   Text,
@@ -3322,7 +3323,14 @@ const RACE_TABS: { id: RaceTab; label: string; short: string }[] = [
 ];
 
 export default function RaceScreen() {
+  const { initialTab } = useLocalSearchParams<{ initialTab?: string }>();
   const [activeTab, setActiveTab] = useState<RaceTab>("dash");
+
+  useEffect(() => {
+    if (initialTab && ["dash", "timer", "tracks", "tuning", "pit", "league"].includes(initialTab)) {
+      setActiveTab(initialTab as RaceTab);
+    }
+  }, [initialTab]);
   const [floatData, setFloatData] = useState<FloatData>({
     visible: false,
     track: null,
