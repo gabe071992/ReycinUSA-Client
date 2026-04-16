@@ -39,6 +39,7 @@ import {
   Timer,
 } from "lucide-react-native";
 import TuningConsole from "@/app/(tabs)/race/tuning";
+import RPlusScreen from "@/components/RPlusScreen";
 import LeagueModule from "@/app/(tabs)/race/league/LeagueModule";
 import { useOBD } from "@/providers/OBDProvider";
 import { useLapTimer } from "@/providers/LapTimerProvider";
@@ -330,7 +331,7 @@ function TracksScreen({
   onFloat: (track: Track, coords: TrackCoordinate[]) => void;
 }) {
   const { userTracks, activeTrackId, setActiveTrackId, saveTrack, deleteTrack, renameTrack, addWaypoint } = useTracks();
-  const [listMode, setListMode] = useState<"known" | "mine">("known");
+  const [listMode, setListMode] = useState<"known" | "mine" | "rplus">("known");
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -732,12 +733,15 @@ function TracksScreen({
     <View style={tracksStyles.root}>
       <View style={tracksStyles.segmentBar}>
         <TouchableOpacity style={[tracksStyles.segment, listMode === "known" && tracksStyles.segmentActive]} onPress={() => setListMode("known")} activeOpacity={0.7}>
-          <Text style={[tracksStyles.segmentText, listMode === "known" && tracksStyles.segmentTextActive]}>TRACK LIBRARY</Text>
+          <Text style={[tracksStyles.segmentText, listMode === "known" && tracksStyles.segmentTextActive]}>LIBRARY</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[tracksStyles.segment, listMode === "mine" && tracksStyles.segmentActive]} onPress={() => setListMode("mine")} activeOpacity={0.7}>
           <Text style={[tracksStyles.segmentText, listMode === "mine" && tracksStyles.segmentTextActive]}>
             MY TRACKS{userTracks.length > 0 && <Text style={tracksStyles.countBadge}> {userTracks.length}</Text>}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[tracksStyles.segment, listMode === "rplus" && tracksStyles.segmentActive]} onPress={() => setListMode("rplus")} activeOpacity={0.7}>
+          <Text style={[tracksStyles.segmentText, listMode === "rplus" && tracksStyles.segmentTextActive, listMode === "rplus" && tracksStyles.segmentTextRPlus]}>R+</Text>
         </TouchableOpacity>
       </View>
 
@@ -755,6 +759,10 @@ function TracksScreen({
             ListEmptyComponent={<View style={tracksStyles.emptyState}><Text style={tracksStyles.emptyTitle}>No tracks found</Text></View>}
           />
         </>
+      )}
+
+      {listMode === "rplus" && (
+        <RPlusScreen />
       )}
 
       {listMode === "mine" && (
@@ -1198,6 +1206,10 @@ const tracksStyles = StyleSheet.create({
   },
   segmentTextActive: {
     color: "#FFF",
+  },
+  segmentTextRPlus: {
+    color: "#FF1801",
+    letterSpacing: 0.5,
   },
   countBadge: {
     color: "#FF1801",
