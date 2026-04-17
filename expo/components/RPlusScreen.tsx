@@ -122,7 +122,7 @@ function toW(fx,fy,fe){return[fx-147.5,fe||0,fy-147.5];}
 function hsl2hex(str){
   if(!str)return '#ff4444';
   if(str.charAt(0)==='#')return str;
-  var m=str.match(/hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);
+  var m=str.match(/hsl\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)%\\s*,\\s*([\\d.]+)%/);
   if(!m)return '#ff4444';
   var h=parseFloat(m[1])/360,s=parseFloat(m[2])/100,l=parseFloat(m[3])/100;
   var q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;
@@ -174,7 +174,7 @@ function buildScene(data){
     if(!line.points||line.points.length<2)return;
     var pts=line.points.map(function(p){return toW(p.x,p.y,0.35);});
     if(line.closed&&pts.length>1)pts.push(pts[0].slice());
-    racingLines[line.id]={id:line.id,color:hsl2hex(line.color||'#ff4444'),pts:pts,visible:line.visible!==false,label:(line.driverName||line.name||'Line')+(line.vehicleInfo?' \u00b7 '+line.vehicleInfo:'')};
+    racingLines[line.id]={id:line.id,color:hsl2hex(line.color||'#ff4444'),pts:pts,visible:line.visible!==false,label:(line.driverName||line.name||'Line')+(line.vehicleInfo?' \\u00b7 '+line.vehicleInfo:'')};
   });
   buildLegend();
 }
@@ -334,7 +334,13 @@ window.addEventListener('resize',function(){
   view=computeView();
 });
 (function loop(){requestAnimationFrame(loop);drawScene();})();
-if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify({type:'WEBVIEW_READY'}));
+(function sendReady(n){
+  if(window.ReactNativeWebView){
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'WEBVIEW_READY'}));
+  } else if(n<60){
+    setTimeout(function(){sendReady(n+1);},50);
+  }
+})(0);
 </script>
 </body>
 </html>`;
@@ -346,6 +352,8 @@ export default function RPlusScreen() {
   const [sceneReady, setSceneReady] = useState(false);
   const sceneReadyRef = useRef(false);
   const sceneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const webviewReadyRef = useRef(false);
+  const webviewFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const parksQuery = useQuery<Park[]>({
     queryKey: ["rplus-parks"],
@@ -451,6 +459,14 @@ export default function RPlusScreen() {
 
   const handleWebViewLoad = useCallback(() => {
     console.log("[RPlusScreen] WebView DOM loaded — awaiting WEBVIEW_READY handshake");
+    if (webviewFallbackRef.current) clearTimeout(webviewFallbackRef.current);
+    webviewFallbackRef.current = setTimeout(() => {
+      if (!webviewReadyRef.current) {
+        console.log("[RPlusScreen] WEBVIEW_READY fallback fired — bridge never signalled, forcing ready");
+        webviewReadyRef.current = true;
+        setWebviewReady(true);
+      }
+    }, 3000);
   }, []);
 
   const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
@@ -458,6 +474,11 @@ export default function RPlusScreen() {
       const msg = JSON.parse(event.nativeEvent.data) as { type: string };
       if (msg.type === "WEBVIEW_READY") {
         console.log("[RPlusScreen] WebView JS ready — handshake complete");
+        if (webviewFallbackRef.current) {
+          clearTimeout(webviewFallbackRef.current);
+          webviewFallbackRef.current = null;
+        }
+        webviewReadyRef.current = true;
         setWebviewReady(true);
       } else if (msg.type === "SCENE_READY") {
         if (sceneTimeoutRef.current) clearTimeout(sceneTimeoutRef.current);
@@ -478,6 +499,7 @@ export default function RPlusScreen() {
       if (parkId === selectedParkId) return;
       setSelectedParkId(parkId);
       setSceneReady(false);
+      sceneReadyRef.current = false;
       console.log("[RPlusScreen] Park selected:", parkId);
     },
     [selectedParkId]
