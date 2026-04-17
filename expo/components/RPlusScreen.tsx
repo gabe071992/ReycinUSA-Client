@@ -334,6 +334,7 @@ window.addEventListener('resize',function(){
   view=computeView();
 });
 (function loop(){requestAnimationFrame(loop);drawScene();})();
+if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify({type:'WEBVIEW_READY'}));
 </script>
 </body>
 </html>`;
@@ -343,6 +344,8 @@ export default function RPlusScreen() {
   const [selectedParkId, setSelectedParkId] = useState<string | null>(null);
   const [webviewReady, setWebviewReady] = useState(false);
   const [sceneReady, setSceneReady] = useState(false);
+  const sceneReadyRef = useRef(false);
+  const sceneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const parksQuery = useQuery<Park[]>({
     queryKey: ["rplus-parks"],
@@ -356,11 +359,14 @@ export default function RPlusScreen() {
   });
 
   useEffect(() => {
-    if (
-      parksQuery.data &&
-      parksQuery.data.length > 0 &&
-      selectedParkId === null
-    ) {
+    if (!parksQuery.data) return;
+    if (parksQuery.data.length === 0) {
+      sceneReadyRef.current = true;
+      setSceneReady(true);
+      console.log("[RPlusScreen] No parks — scene ready immediately");
+      return;
+    }
+    if (selectedParkId === null) {
       setSelectedParkId(parksQuery.data[0].id);
       console.log("[RPlusScreen] Auto-selected park:", parksQuery.data[0].id);
     }
@@ -425,22 +431,39 @@ export default function RPlusScreen() {
 
   useEffect(() => {
     if (webviewReady && trackDataQuery.data) {
+      sceneReadyRef.current = false;
       setSceneReady(false);
       sendTrackData();
+      console.log("[RPlusScreen] sendTrackData dispatched — starting 2s fallback timer");
+      if (sceneTimeoutRef.current) clearTimeout(sceneTimeoutRef.current);
+      sceneTimeoutRef.current = setTimeout(() => {
+        if (!sceneReadyRef.current) {
+          sceneReadyRef.current = true;
+          setSceneReady(true);
+          console.log("[RPlusScreen] Fallback: forced sceneReady after timeout");
+        }
+      }, 2000);
     }
+    return () => {
+      if (sceneTimeoutRef.current) clearTimeout(sceneTimeoutRef.current);
+    };
   }, [webviewReady, trackDataQuery.data, sendTrackData]);
 
   const handleWebViewLoad = useCallback(() => {
-    setWebviewReady(true);
-    console.log("[RPlusScreen] WebView loaded");
+    console.log("[RPlusScreen] WebView DOM loaded — awaiting WEBVIEW_READY handshake");
   }, []);
 
   const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(event.nativeEvent.data) as { type: string };
-      if (msg.type === "SCENE_READY") {
+      if (msg.type === "WEBVIEW_READY") {
+        console.log("[RPlusScreen] WebView JS ready — handshake complete");
+        setWebviewReady(true);
+      } else if (msg.type === "SCENE_READY") {
+        if (sceneTimeoutRef.current) clearTimeout(sceneTimeoutRef.current);
+        sceneReadyRef.current = true;
         setSceneReady(true);
-        console.log("[RPlusScreen] Scene ready");
+        console.log("[RPlusScreen] Scene ready via SCENE_READY message");
       }
     } catch (_) {}
   }, []);
