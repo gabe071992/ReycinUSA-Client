@@ -75,7 +75,7 @@ const TRACK_3D_HTML = `<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;background:#080808;overflow:hidden}
-canvas{display:block;touch-action:none;position:fixed;top:0;left:0}
+canvas{display:block;touch-action:none;position:fixed;top:0;left:0;width:100vw;height:100vh}
 #ui{position:fixed;bottom:0;left:0;right:0;padding:8px 10px 12px;background:linear-gradient(transparent,rgba(0,0,0,0.92));display:flex;flex-wrap:wrap;gap:5px;pointer-events:none}
 .leg{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:rgba(0,0,0,0.78);border:1px solid #1e1e1e;border-radius:5px;cursor:pointer;pointer-events:auto;touch-action:manipulation}
 .ld{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -92,10 +92,24 @@ canvas{display:block;touch-action:none;position:fixed;top:0;left:0}
 <div id="hint">AWAITING DATA</div>
 <script>
 var canvas=document.getElementById('c');
-var W=window.innerWidth,H=window.innerHeight;
-canvas.width=W;canvas.height=H;
 var ctx=canvas.getContext('2d');
-var cam={theta:0.6,phi:1.0,r:260,tx:0,ty:0,tz:0};
+var DPR=Math.min(window.devicePixelRatio||1,3);
+var W=0,H=0;
+function resizeCanvas(){
+  var nw=window.innerWidth||document.documentElement.clientWidth||320;
+  var nh=window.innerHeight||document.documentElement.clientHeight||568;
+  if(nw<10||nh<10)return;
+  if(nw===W&&nh===H)return;
+  W=nw;H=nh;
+  canvas.width=Math.round(W*DPR);
+  canvas.height=Math.round(H*DPR);
+  canvas.style.width=W+'px';
+  canvas.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  view=computeView();
+}
+var cam={theta:0.6,phi:0.9,r:300,tx:0,ty:0,tz:0};
+var _lastResetCam={theta:0.6,phi:0.9,r:300,tx:0,ty:0,tz:0};
 function computeView(){
   var sp=Math.sin(cam.phi),cp=Math.cos(cam.phi),st=Math.sin(cam.theta),ct=Math.cos(cam.theta);
   var ex=cam.tx+cam.r*sp*ct,ey=cam.ty+cam.r*cp,ez=cam.tz+cam.r*sp*st;
@@ -110,6 +124,7 @@ function computeView(){
 }
 var view=computeView();
 function project(wx,wy,wz){
+  if(W===0||H===0)return null;
   var v=view;
   var cx=v[0]*wx+v[1]*wy+v[2]*wz+v[3];
   var cy=v[4]*wx+v[5]*wy+v[6]*wz+v[7];
@@ -148,6 +163,28 @@ function buildSurface(pts,hw){
   }
   return quads;
 }
+function fitCamera(data){
+  var segs=data.segments||[];
+  if(segs.length===0)return;
+  var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  segs.forEach(function(seg){
+    var coords=[[seg.startX,seg.startY],[seg.endX,seg.endY]];
+    if(seg.controlX!=null)coords.push([seg.controlX,seg.controlY]);
+    coords.forEach(function(c){
+      var wx=c[0]-147.5,wz=c[1]-147.5;
+      if(wx<minX)minX=wx;if(wx>maxX)maxX=wx;
+      if(wz<minZ)minZ=wz;if(wz>maxZ)maxZ=wz;
+    });
+  });
+  if(!isFinite(minX))return;
+  var cx=(minX+maxX)/2,cz=(minZ+maxZ)/2;
+  var span=Math.max(maxX-minX,maxZ-minZ,40);
+  cam.tx=cx;cam.ty=0;cam.tz=cz;
+  cam.r=span*1.5+50;
+  cam.theta=0.6;cam.phi=0.85;
+  _lastResetCam={theta:cam.theta,phi:cam.phi,r:cam.r,tx:cam.tx,ty:cam.ty,tz:cam.tz};
+  view=computeView();
+}
 function buildScene(data){
   trackQuads=[];trackDashes=[];facilityBoxes=[];racingLines={};
   (data.segments||[]).forEach(function(seg){
@@ -176,6 +213,7 @@ function buildScene(data){
     if(line.closed&&pts.length>1)pts.push(pts[0].slice());
     racingLines[line.id]={id:line.id,color:hsl2hex(line.color||'#ff4444'),pts:pts,visible:line.visible!==false,label:(line.driverName||line.name||'Line')+(line.vehicleInfo?' \\u00b7 '+line.vehicleInfo:'')};
   });
+  fitCamera(data);
   buildLegend();
 }
 function buildLegend(){
@@ -234,6 +272,18 @@ function drawBox(box){
   ctx.strokeStyle=color;ctx.lineWidth=1;ctx.stroke();
 }
 function drawScene(){
+  var vw=window.innerWidth||document.documentElement.clientWidth;
+  var vh=window.innerHeight||document.documentElement.clientHeight;
+  if(vw>10&&vh>10&&(vw!==W||vh!==H)){
+    W=vw;H=vh;
+    canvas.width=Math.round(W*DPR);
+    canvas.height=Math.round(H*DPR);
+    canvas.style.width=W+'px';
+    canvas.style.height=H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    view=computeView();
+  }
+  if(W===0||H===0){requestAnimationFrame(drawScene);return;}
   ctx.fillStyle='#080808';ctx.fillRect(0,0,W,H);
   drawGrid();
   var pqs=[];
@@ -297,7 +347,7 @@ canvas.addEventListener('touchmove',function(e){
   }else if(e.touches.length===2&&lastPinchDist>0){
     var dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
     var dist=Math.sqrt(dx*dx+dy*dy);
-    cam.r=Math.max(40,Math.min(500,cam.r*lastPinchDist/dist));
+    cam.r=Math.max(40,Math.min(800,cam.r*lastPinchDist/dist));
     lastPinchDist=dist;
     var mx=(e.touches[0].clientX+e.touches[1].clientX)/2,my=(e.touches[0].clientY+e.touches[1].clientY)/2;
     if(lastPinchMid){
@@ -321,23 +371,25 @@ function handleMsg(e){
       buildScene(d.payload||{});
       if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify({type:'SCENE_READY'}));
     }else if(d.type==='RESET_CAM'){
-      cam.theta=0.6;cam.phi=1.0;cam.r=260;cam.tx=0;cam.ty=0;cam.tz=0;
+      cam.theta=_lastResetCam.theta;cam.phi=_lastResetCam.phi;cam.r=_lastResetCam.r;
+      cam.tx=_lastResetCam.tx;cam.ty=_lastResetCam.ty;cam.tz=_lastResetCam.tz;
       view=computeView();
     }
   }catch(err){}
 }
 window.addEventListener('message',handleMsg);
 document.addEventListener('message',handleMsg);
-window.addEventListener('resize',function(){
-  W=window.innerWidth;H=window.innerHeight;
-  canvas.width=W;canvas.height=H;
-  view=computeView();
-});
+function onResize(){resizeCanvas();}
+window.addEventListener('resize',onResize);
+if(window.visualViewport){window.visualViewport.addEventListener('resize',onResize);}
+resizeCanvas();
+setTimeout(resizeCanvas,100);
+setTimeout(resizeCanvas,500);
 (function loop(){requestAnimationFrame(loop);drawScene();})();
 (function sendReady(n){
   if(window.ReactNativeWebView){
     window.ReactNativeWebView.postMessage(JSON.stringify({type:'WEBVIEW_READY'}));
-  } else if(n<60){
+  } else if(n<80){
     setTimeout(function(){sendReady(n+1);},50);
   }
 })(0);

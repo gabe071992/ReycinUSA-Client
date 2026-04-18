@@ -1,26 +1,27 @@
-# Homepage Cleanup, League Streaming Library Rename & Android Nav Bar Hiding
+# Fix R+ 3D Track Viewer — Canvas Rendering
 
 
-## Features
+## Root Cause
+The 3D canvas is initialized with zero dimensions because the WebView reports `innerWidth/Height = 0` at script startup on Android. Every track point collapses to a single dot at the origin (the "zoomed in" effect), drawn on a 0×0 canvas (the "blank" effect). The park name and racing line toggles still appear because those are HTML elements, not canvas-drawn — confirming the data pipeline works perfectly.
 
-### Homepage Updates
-- **Remove** the "OBD Diagnostics" and "Warranty" quick action buttons entirely
-- **Replace** the Diagnostics slot with a "Watch" button (📺) that deep-links directly into the League tab, pre-opening the streaming library
-- **Vehicle cards** in "Our Vehicles" are now tappable — pressing any vehicle navigates to its dedicated Shop product page
+## What Gets Fixed
 
-### League Interface
-- The "WATCH VIDEOS" button label inside the League module is renamed to **"LEAGUES LIBRARY"** to reflect the broader streaming network intent
+**Canvas initialization**
+- Replace the instant `window.innerWidth/Height` capture with a deferred resize using `requestAnimationFrame` + `setTimeout` chained together, forcing a re-measure after the native layout settles
+- Add a per-frame canvas size guard: on every draw, if `W` or `H` is 0 or mismatches the actual viewport, re-measure and resize before drawing anything — this self-heals across all Android timing variations
+- Add explicit `width:100vw; height:100vh` CSS to the canvas as a visual fallback while the pixel buffer is being established
 
-### Android Navigation Bar
-- The Android system bottom bar (back / home / recents buttons) is set to **automatically hide** while the app is open and in use
-- Swiping up from the very bottom of the screen will temporarily reveal it, matching the standard immersive mode behaviour used by apps like YouTube and Instagram
+**Device pixel ratio**
+- Apply `devicePixelRatio` scaling to the canvas pixel buffer (CSS size stays the same, buffer is 2× or 3× larger) — fixes blurry rendering on all high-DPI Android devices and makes edges crisp
 
-## Design
-- No visual style changes — all existing colours, typography, and layouts are preserved
-- The Quick Actions grid will still be 2×2, just with the four correct entries: Watch, Track Support, Parts, and a fourth slot as-is
-- Watch button uses a 📺 icon consistent with the existing grid style
+**Camera auto-fit after data loads**
+- After `buildScene()` runs, compute the bounding box of all track segment coordinates
+- Set the camera target to the track centroid and compute an `r` (zoom distance) that frames the entire track with padding — so any track, regardless of position or scale in the 295×295 grid, always fills the viewport correctly on first load
+- The user can still pinch/drag freely after auto-fit
 
-## Screens Affected
-- **Home tab** — Quick Actions grid and Our Vehicles cards
-- **Race tab → League subtab** — "LEAGUES LIBRARY" button label
-- **Root layout** — Android navigation bar hiding applied globally on mount
+**Resize handler hardening**
+- Wire the resize to `visualViewport` change as well as `window resize`, covering Android's split-screen and orientation change cases
+- Force an immediate re-draw after any resize
+
+**Handshake reliability**
+- Keep the existing `WEBVIEW_READY` → `SCENE_READY` message chain and fallback timers unchanged (they work)
