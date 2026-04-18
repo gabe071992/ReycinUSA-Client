@@ -1,27 +1,27 @@
-# Fix R+ 3D Track Viewer — Canvas Rendering
+# Mechanical Watch Theme — Home Screen Overhaul
 
 
-## Root Cause
-The 3D canvas is initialized with zero dimensions because the WebView reports `innerWidth/Height = 0` at script startup on Android. Every track point collapses to a single dot at the origin (the "zoomed in" effect), drawn on a 0×0 canvas (the "blank" effect). The park name and racing line toggles still appear because those are HTML elements, not canvas-drawn — confirming the data pipeline works perfectly.
+## Features
+- Animated gear rings continuously and subtly rotate behind the Reycin branding in the hero — multiple rings at different speeds and directions, rendered with pure geometric shapes
+- Subtle tick sound plays on every button press and navigation tap throughout the app
+- "Explore F300" hero button and module removed entirely — the Shop page already covers it
+- Vehicle cards in "Our Vehicles" navigate directly to that vehicle's Shop page
+- Quick Actions restyled as **watch complications** — four circular dial cards arranged in a 2×2 compass formation, each with an engraved ring border, small dial tick marks, and gold-accented icon/label
+- News/announcement cards restyled with a thin brushed-gold left border and engraved-plate aesthetic
+- Section headers styled with fine uppercase letter-spacing and a gold rule line beneath, like chapter markers on a luxury watch bezel
 
-## What Gets Fixed
+## Design
+- **Base color**: Deep black (`#0A0A0A`) — richer and deeper than the current flat black
+- **Primary accent**: Brushed gold (`#C9A84C`) for borders, rule lines, icons, and highlighted text
+- **Secondary accent**: Warm champagne (`#E8D5A0`) for subtitles and secondary labels
+- **Card surfaces**: Very dark near-black (`#111111`) with a faint gold-tinted inner glow border (`rgba(201,168,76,0.2)`)
+- **Typography**: Tight letter-spacing, uppercase labels in small caps style, weight contrast between ultra-light hero text and bold accent labels
+- **Hero section**: Full-width dark panel with the Reycin wordmark centered; three concentric gear-ring SVG shapes rotate slowly behind it (one clockwise, one counter-clockwise, one slower) — all rendered in translucent gold strokes
+- **Complication cards**: Circular, engraved-look cards with radial tick marks around the rim (12 marks like a watch), a gold-tinted icon in the center, label below — pressed state triggers a scale pulse and a tick sound
+- **Announcement cards**: Dark plate with a 2px solid gold left accent bar, fine metadata row, clean white title
+- **Loading state**: Gear ring animation spins while data loads — no generic spinner
 
-**Canvas initialization**
-- Replace the instant `window.innerWidth/Height` capture with a deferred resize using `requestAnimationFrame` + `setTimeout` chained together, forcing a re-measure after the native layout settles
-- Add a per-frame canvas size guard: on every draw, if `W` or `H` is 0 or mismatches the actual viewport, re-measure and resize before drawing anything — this self-heals across all Android timing variations
-- Add explicit `width:100vw; height:100vh` CSS to the canvas as a visual fallback while the pixel buffer is being established
-
-**Device pixel ratio**
-- Apply `devicePixelRatio` scaling to the canvas pixel buffer (CSS size stays the same, buffer is 2× or 3× larger) — fixes blurry rendering on all high-DPI Android devices and makes edges crisp
-
-**Camera auto-fit after data loads**
-- After `buildScene()` runs, compute the bounding box of all track segment coordinates
-- Set the camera target to the track centroid and compute an `r` (zoom distance) that frames the entire track with padding — so any track, regardless of position or scale in the 295×295 grid, always fills the viewport correctly on first load
-- The user can still pinch/drag freely after auto-fit
-
-**Resize handler hardening**
-- Wire the resize to `visualViewport` change as well as `window resize`, covering Android's split-screen and orientation change cases
-- Force an immediate re-draw after any resize
-
-**Handshake reliability**
-- Keep the existing `WEBVIEW_READY` → `SCENE_READY` message chain and fallback timers unchanged (they work)
+## Screens Changed
+- **Home screen** (`expo/app/(tabs)/home/index.tsx`) — completely restyled with the mechanical watch visual language described above
+- **Theme constants** (`expo/constants/theme.ts`) — gold and watch-palette colors added for reuse across the app
+- **Tick sound utility** — a small helper that plays a subtle tick audio clip on demand, used by button press handlers across the home screen

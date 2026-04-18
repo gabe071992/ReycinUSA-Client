@@ -12,6 +12,16 @@ export const theme = {
     success: "#34C759",
     warning: "#FF9500",
     glow: "rgba(255, 255, 255, 0.08)",
+    watch: {
+      gold: "#C9A84C",
+      goldDim: "rgba(201,168,76,0.25)",
+      goldGlow: "rgba(201,168,76,0.1)",
+      goldBorder: "rgba(201,168,76,0.18)",
+      champagne: "#E8D5A0",
+      deepBlack: "#0A0A0A",
+      plate: "#111111",
+      plateDark: "#0D0D0D",
+    },
   },
   spacing: {
     xs: 4,

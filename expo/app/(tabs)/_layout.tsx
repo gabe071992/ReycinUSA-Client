@@ -1,9 +1,12 @@
 import { Tabs, router } from "expo-router";
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Home, ShoppingBag, Flag, Car, User } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { useCart } from "@/providers/CartProvider";
+
+const GOLD = "#C9A84C";
+const DEEP_BLACK = "#0A0A0A";
 
 function TabBarIcon({ icon: Icon, color, focused }: any) {
   return (
@@ -50,20 +53,20 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: theme.colors.white,
-        tabBarInactiveTintColor: theme.colors.textGray,
+        tabBarActiveTintColor: GOLD,
+        tabBarInactiveTintColor: "rgba(255,255,255,0.3)",
         tabBarStyle: {
-          backgroundColor: theme.colors.black,
-          borderTopColor: theme.colors.borderGray,
+          backgroundColor: DEEP_BLACK,
+          borderTopColor: "rgba(201,168,76,0.15)",
           borderTopWidth: 0.5,
           height: 88,
           paddingBottom: 34,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: "500",
-          marginTop: 4,
+          letterSpacing: 1.2,
         },
         headerShown: false,
       }}
