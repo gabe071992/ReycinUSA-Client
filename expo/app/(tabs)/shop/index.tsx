@@ -114,9 +114,9 @@ export default function ShopScreen() {
 
       <View style={styles.shopHero}>
         <CircleDot size={26} color={W.gold} strokeWidth={1.2} />
-        <Text style={styles.heroEyebrow}>Reycin Atelier</Text>
-        <Text style={styles.heroTitle}>Precision Parts</Text>
-        <Text style={styles.heroCopy}>Vehicles, hardware, tools, and track support arranged like instruments on a movement plate.</Text>
+        <Text style={styles.heroEyebrow}>Reycin Shop</Text>
+        <Text style={styles.heroTitle}>Precision On Demand</Text>
+        <Text style={styles.heroCopy}>Vehicles, hardware, tools, and track support provided by ReycinUSA or through it's partners.</Text>
       </View>
 
       <View style={styles.categoriesSection}>
