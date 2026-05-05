@@ -398,7 +398,7 @@ export default function HomeScreen() {
               <View style={styles.heroRuleLine} />
               <View style={styles.heroRuleDot} />
             </View>
-            <Text style={styles.heroSeries}>F300  SERIES</Text>
+          
             <Text style={styles.heroTime}>{timeStr}</Text>
           </View>
         </Animated.View>
