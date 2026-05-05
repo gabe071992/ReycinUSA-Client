@@ -20,6 +20,10 @@ import {
   Timer,
 } from "lucide-react-native";
 import { useLapTimer, RaceSession } from "@/providers/LapTimerProvider";
+import { theme } from "@/constants/theme";
+import { tick } from "@/utils/tick";
+
+const W = theme.colors.watch;
 
 function formatTime(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -84,22 +88,22 @@ function SessionCard({
     <View style={cardStyles.container} testID={`session-card-${session.id}`}>
       <TouchableOpacity
         style={cardStyles.header}
-        onPress={() => setExpanded((v) => !v)}
+        onPress={() => { tick(); setExpanded((v) => !v); }}
         activeOpacity={0.8}
       >
         <View style={cardStyles.headerLeft}>
           <View style={cardStyles.trackIconWrap}>
-            <Flag size={14} color="#FF1801" strokeWidth={2} />
+            <Flag size={14} color={W.gold} strokeWidth={2} />
           </View>
           <View style={cardStyles.headerInfo}>
             <Text style={cardStyles.trackName} numberOfLines={1}>
               {session.trackName}
             </Text>
             <View style={cardStyles.metaRow}>
-              <Calendar size={10} color="#333" strokeWidth={2} />
+              <Calendar size={10} color={W.champagne} strokeWidth={2} />
               <Text style={cardStyles.metaText}>{formatDate(session.date)}</Text>
               <Text style={cardStyles.metaDot}>·</Text>
-              <Clock size={10} color="#333" strokeWidth={2} />
+              <Clock size={10} color={W.champagne} strokeWidth={2} />
               <Text style={cardStyles.metaText}>{session.timeOfDay}</Text>
             </View>
           </View>
@@ -109,9 +113,9 @@ function SessionCard({
             <Text style={cardStyles.lapCountText}>{session.laps.length} LAPS</Text>
           </View>
           {expanded ? (
-            <ChevronUp size={16} color="#333" strokeWidth={2} />
+            <ChevronUp size={16} color={W.champagne} strokeWidth={2} />
           ) : (
-            <ChevronDown size={16} color="#333" strokeWidth={2} />
+            <ChevronDown size={16} color={W.champagne} strokeWidth={2} />
           )}
         </View>
       </TouchableOpacity>
@@ -196,7 +200,7 @@ function SessionCard({
         activeOpacity={0.7}
         testID={`delete-session-${session.id}`}
       >
-        <Trash2 size={13} color="#333" strokeWidth={2} />
+        <Trash2 size={13} color={W.champagne} strokeWidth={2} />
       </TouchableOpacity>
     </View>
   );
@@ -204,9 +208,9 @@ function SessionCard({
 
 const cardStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#080808",
+    backgroundColor: W.plate,
     borderWidth: 1,
-    borderColor: "#141414",
+    borderColor: W.goldBorder,
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 12,
@@ -228,9 +232,9 @@ const cardStyles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 9,
-    backgroundColor: "rgba(255,24,1,0.08)",
+    backgroundColor: W.goldGlow,
     borderWidth: 1,
-    borderColor: "#2a0a00",
+    borderColor: W.goldBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -248,7 +252,7 @@ const cardStyles = StyleSheet.create({
   },
   metaText: {
     fontSize: 10,
-    color: "#333",
+    color: W.champagne,
     fontVariant: ["tabular-nums"] as const,
   },
   metaDot: { fontSize: 10, color: "#222" },
@@ -267,13 +271,13 @@ const cardStyles = StyleSheet.create({
   lapCountText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#444",
+    color: W.champagne,
     letterSpacing: 1,
   },
   statsRow: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#0d0d0d",
+    borderTopColor: W.goldBorder,
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
@@ -294,30 +298,30 @@ const cardStyles = StyleSheet.create({
   },
   notesRow: {
     borderTopWidth: 1,
-    borderTopColor: "#0d0d0d",
+    borderTopColor: W.goldBorder,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   notesText: {
     fontSize: 11,
-    color: "#444",
+    color: W.champagne,
     lineHeight: 16,
     fontStyle: "italic",
   },
   lapList: {
     borderTopWidth: 1,
-    borderTopColor: "#0d0d0d",
+    borderTopColor: W.goldBorder,
   },
   lapListHeader: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#0a0a0a",
+    borderBottomColor: W.goldBorder,
   },
   lapListTitle: {
     fontSize: 8,
     fontWeight: "700",
-    color: "#222",
+    color: W.goldDim,
     letterSpacing: 1.5,
   },
   lapRow: {
@@ -326,7 +330,7 @@ const cardStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#0a0a0a",
+    borderBottomColor: W.goldBorder,
     gap: 12,
   },
   lapRowBest: { backgroundColor: "rgba(52,199,89,0.04)" },
@@ -334,7 +338,7 @@ const cardStyles = StyleSheet.create({
   lapNum: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#333",
+    color: W.champagne,
     width: 32,
     fontVariant: ["tabular-nums"] as const,
   },
@@ -367,7 +371,7 @@ const cardStyles = StyleSheet.create({
   },
   deltaText: {
     fontSize: 10,
-    color: "#444",
+    color: W.champagne,
     fontVariant: ["tabular-nums"] as const,
   },
   deleteBtn: {
@@ -436,20 +440,20 @@ export default function SessionsScreen() {
             <View style={styles.sortBtns}>
               <TouchableOpacity
                 style={[styles.sortBtn, sortBy === "date" && styles.sortBtnActive]}
-                onPress={() => setSortBy("date")}
+                onPress={() => { tick(); setSortBy("date"); }}
                 activeOpacity={0.7}
               >
-                <Calendar size={11} color={sortBy === "date" ? "#FF1801" : "#333"} strokeWidth={2} />
+                <Calendar size={11} color={sortBy === "date" ? W.gold : W.champagne} strokeWidth={2} />
                 <Text style={[styles.sortBtnText, sortBy === "date" && styles.sortBtnTextActive]}>
                   DATE
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.sortBtn, sortBy === "best" && styles.sortBtnActive]}
-                onPress={() => setSortBy("best")}
+                onPress={() => { tick(); setSortBy("best"); }}
                 activeOpacity={0.7}
               >
-                <Trophy size={11} color={sortBy === "best" ? "#FF1801" : "#333"} strokeWidth={2} />
+                <Trophy size={11} color={sortBy === "best" ? W.gold : W.champagne} strokeWidth={2} />
                 <Text style={[styles.sortBtnText, sortBy === "best" && styles.sortBtnTextActive]}>
                   BEST LAP
                 </Text>
@@ -460,12 +464,12 @@ export default function SessionsScreen() {
 
         {!sessionsLoaded ? (
           <View style={styles.emptyState}>
-            <Timer size={36} color="#1a1a1a" strokeWidth={1.5} />
+            <Timer size={36} color={W.goldDim} strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>Loading sessions...</Text>
           </View>
         ) : sorted.length === 0 ? (
           <View style={styles.emptyState}>
-            <Timer size={36} color="#1a1a1a" strokeWidth={1.5} />
+            <Timer size={36} color={W.goldDim} strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>No Sessions Saved</Text>
             <Text style={styles.emptySub}>
               Run the Lap Timer in the Race tab and save a session to review it here.
@@ -489,16 +493,16 @@ export default function SessionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: W.deepBlack,
   },
   content: {
     padding: 16,
   },
   overviewRow: {
     flexDirection: "row",
-    backgroundColor: "#080808",
+    backgroundColor: W.plate,
     borderWidth: 1,
-    borderColor: "#141414",
+    borderColor: W.goldBorder,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -521,7 +525,7 @@ const styles = StyleSheet.create({
   },
   overviewLabel: {
     fontSize: 10,
-    color: "#333",
+    color: W.champagne,
     fontWeight: "600",
     letterSpacing: 0.5,
   },
@@ -546,23 +550,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     borderWidth: 1,
-    borderColor: "#1a1a1a",
+    borderColor: W.goldBorder,
     borderRadius: 5,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   sortBtnActive: {
-    borderColor: "#2a0a00",
-    backgroundColor: "rgba(255,24,1,0.06)",
+    borderColor: W.goldBorder,
+    backgroundColor: W.goldGlow,
   },
   sortBtnText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#333",
+    color: W.champagne,
     letterSpacing: 1,
   },
   sortBtnTextActive: {
-    color: "#FF1801",
+    color: W.gold,
   },
   emptyState: {
     alignItems: "center",
@@ -573,12 +577,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#222",
+    color: W.goldDim,
     marginTop: 8,
   },
   emptySub: {
     fontSize: 12,
-    color: "#1e1e1e",
+    color: W.champagne,
     textAlign: "center",
     lineHeight: 18,
   },

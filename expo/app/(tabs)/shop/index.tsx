@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { theme } from '@/constants/theme';
-import { ShoppingBag, Car, Wrench, Shield, FileText, Package, Hammer, Route } from 'lucide-react-native';
+import { ShoppingBag, Car, Wrench, Shield, FileText, Package, Hammer, Route, CircleDot } from 'lucide-react-native';
+import { tick } from '@/utils/tick';
 import { router } from 'expo-router';
 import { useCart } from '@/providers/CartProvider';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { app } from '@/config/firebase';
+
+const W = theme.colors.watch;
 
 interface Category {
   name: string;
@@ -87,6 +90,7 @@ export default function ShopScreen() {
   }, []);
 
   const handleCategoryPress = (categoryKey: string) => {
+    tick();
     console.log('Button pressed for category:', categoryKey);
     router.push(`/(tabs)/shop/category/${categoryKey}` as any);
   };
@@ -99,7 +103,7 @@ export default function ShopScreen() {
           onPress={() => router.push('/cart' as any)}
         >
           <View style={styles.cartBannerContent}>
-            <ShoppingBag size={20} color={theme.colors.black} />
+            <ShoppingBag size={20} color={W.deepBlack} />
             <Text style={styles.cartBannerText}>
               {cartCount} {cartCount === 1 ? "item" : "items"} in cart
             </Text>
@@ -108,11 +112,18 @@ export default function ShopScreen() {
         </TouchableOpacity>
       )}
 
+      <View style={styles.shopHero}>
+        <CircleDot size={26} color={W.gold} strokeWidth={1.2} />
+        <Text style={styles.heroEyebrow}>Reycin Atelier</Text>
+        <Text style={styles.heroTitle}>Precision Parts</Text>
+        <Text style={styles.heroCopy}>Vehicles, hardware, tools, and track support arranged like instruments on a movement plate.</Text>
+      </View>
+
       <View style={styles.categoriesSection}>
         <Text style={styles.sectionTitle}>Categories</Text>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.white} />
+            <ActivityIndicator size="large" color={W.gold} />
             <Text style={styles.loadingText}>Loading catalog...</Text>
           </View>
         ) : !categories ? (
@@ -133,8 +144,8 @@ export default function ShopScreen() {
                     onPress={() => handleCategoryPress(key)}
                     activeOpacity={0.8}
                   >
-                    <View style={[styles.categoryIcon, { backgroundColor: theme.colors.darkGray }]}>
-                      <Icon size={32} color={theme.colors.white} strokeWidth={1.5} />
+                    <View style={styles.categoryIcon}>
+                      <Icon size={32} color={W.gold} strokeWidth={1.5} />
                     </View>
                     <Text style={styles.categoryName}>{category.name}</Text>
                   </TouchableOpacity>
@@ -177,10 +188,40 @@ export default function ShopScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
+  },
+  shopHero: {
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+    padding: theme.spacing.lg,
+    borderRadius: theme.borderRadius.xl,
+    backgroundColor: W.plate,
+    borderWidth: 1,
+    borderColor: W.goldBorder,
+    gap: 8,
+  },
+  heroEyebrow: {
+    color: W.gold,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 3,
+    textTransform: "uppercase",
+  },
+  heroTitle: {
+    color: theme.colors.white,
+    fontSize: 34,
+    fontWeight: "300",
+    letterSpacing: -0.8,
+  },
+  heroCopy: {
+    color: W.champagne,
+    opacity: 0.72,
+    fontSize: 13,
+    lineHeight: 19,
   },
   cartBanner: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -195,12 +236,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cartBannerText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 14,
     fontWeight: "600",
   },
   cartBannerAction: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 14,
     fontWeight: "500",
   },
@@ -208,10 +249,12 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   sectionTitle: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: theme.colors.white,
+    fontSize: 13,
+    fontWeight: "700",
+    color: W.gold,
     marginBottom: theme.spacing.md,
+    letterSpacing: 2.5,
+    textTransform: "uppercase",
   },
   categoriesGrid: {
     flexDirection: "row",
@@ -225,12 +268,13 @@ const styles = StyleSheet.create({
   categoryIcon: {
     width: 80,
     height: 80,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: 40,
+    backgroundColor: W.plate,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: theme.spacing.sm,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   categoryName: {
     fontSize: 14,
@@ -241,11 +285,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   featuredCard: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.lg,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   featuredImage: {
     width: "100%",
@@ -256,7 +300,7 @@ const styles = StyleSheet.create({
   },
   featuredTag: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.gold,
     letterSpacing: 1,
     marginBottom: 8,
   },
@@ -268,19 +312,19 @@ const styles = StyleSheet.create({
   },
   featuredDescription: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
     lineHeight: 20,
     marginBottom: theme.spacing.md,
   },
   featuredButton: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: theme.borderRadius.md,
     alignSelf: "flex-start",
   },
   featuredButtonText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 14,
     fontWeight: "600",
     letterSpacing: 0.5,

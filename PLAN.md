@@ -1,4 +1,4 @@
-# Mechanical Watch Theme — Home Screen Overhaul
+# Mechanical Watch Theme — App-Wide Expansion
 
 
 ## Features
@@ -24,4 +24,7 @@
 ## Screens Changed
 - **Home screen** (`expo/app/(tabs)/home/index.tsx`) — completely restyled with the mechanical watch visual language described above
 - **Theme constants** (`expo/constants/theme.ts`) — gold and watch-palette colors added for reuse across the app
-- **Tick sound utility** — a small helper that plays a subtle tick audio clip on demand, used by button press handlers across the home screen
+- **Tick sound utility** — a small helper that plays a subtle tick audio clip on demand, used by button press handlers across themed surfaces
+- **Shop expansion** (`expo/app/(tabs)/shop/index.tsx`, `category/[id].tsx`, `product/[id].tsx`) — extended the brushed-gold atelier treatment into catalog browsing, category grids, product cards, configurator controls, and product action bars
+- **Garage expansion** (`expo/app/(tabs)/garage/index.tsx`, `[id].tsx`, `obd.tsx`) — extended engraved dark plates, champagne metadata, gold highlights, and tick interactions across vehicle lists, vehicle detail subtabs, service/damage/reservation cards, modals, and OBD diagnostics
+- **Account expansion** (`expo/app/(tabs)/account/index.tsx`, `sessions.tsx`) — restyled profile, stats, menu rows, edit sheet, and race session history with the same mechanical-watch palette and instrument-readout feel

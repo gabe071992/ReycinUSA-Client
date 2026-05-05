@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { theme } from "@/constants/theme";
+import { tick } from "@/utils/tick";
 import {
   User,
   Package,
@@ -27,6 +28,8 @@ import { useLapTimer } from "@/providers/LapTimerProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
+
+const W = theme.colors.watch;
 
 function fmtLap(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -110,11 +113,11 @@ export default function AccountScreen() {
               <Text style={styles.profileName}>{displayName}</Text>
               <TouchableOpacity
                 style={styles.editNameBtn}
-                onPress={openEditModal}
+                onPress={() => { tick(); openEditModal(); }}
                 testID="edit-name-btn"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Pencil size={15} color={theme.colors.textGray} strokeWidth={1.8} />
+                <Pencil size={15} color={W.gold} strokeWidth={1.8} />
               </TouchableOpacity>
             </View>
             <Text style={styles.profileEmail}>{profile?.email}</Text>
@@ -146,7 +149,7 @@ export default function AccountScreen() {
               >
                 <View style={styles.menuItemLeft}>
                   <View style={styles.menuIcon}>
-                    <Icon size={20} color={theme.colors.white} strokeWidth={1.5} />
+                    <Icon size={20} color={W.gold} strokeWidth={1.5} />
                   </View>
                   <View>
                     <Text style={styles.menuTitle}>{item.title}</Text>
@@ -262,21 +265,21 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
     padding: theme.spacing.lg,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderGray,
+    borderBottomColor: W.goldBorder,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     justifyContent: "center",
     alignItems: "center",
     marginRight: theme.spacing.md,
@@ -291,26 +294,26 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   profileName: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: theme.colors.white,
+    fontSize: 22,
+    fontWeight: "300",
+    color: W.gold,
   },
   editNameBtn: {
     padding: 2,
   },
   profileEmail: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   statsContainer: {
     flexDirection: "row",
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.lg,
     padding: theme.spacing.lg,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   stat: {
     flex: 1,
@@ -318,17 +321,17 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 24,
-    fontWeight: "600",
-    color: theme.colors.white,
+    fontWeight: "300",
+    color: W.gold,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   statDivider: {
     width: 1,
-    backgroundColor: theme.colors.borderGray,
+    backgroundColor: W.goldBorder,
     marginHorizontal: theme.spacing.md,
   },
   menuSection: {
@@ -341,7 +344,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderGray,
+    borderBottomColor: W.goldBorder,
   },
   menuItemLeft: {
     flexDirection: "row",
@@ -352,7 +355,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     justifyContent: "center",
     alignItems: "center",
     marginRight: theme.spacing.md,
@@ -365,7 +368,7 @@ const styles = StyleSheet.create({
   },
   menuSubtitle: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   signOutButton: {
     flexDirection: "row",
@@ -374,7 +377,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xl,
     marginHorizontal: theme.spacing.lg,
     paddingVertical: 14,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: "#EF4444",
@@ -387,7 +390,7 @@ const styles = StyleSheet.create({
   },
   version: {
     textAlign: "center",
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontSize: 12,
     marginTop: theme.spacing.xl,
     marginBottom: theme.spacing.xxl,
@@ -398,18 +401,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.6)",
   },
   modalSheet: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: theme.spacing.lg,
     paddingBottom: 40,
     borderTopWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   modalHandle: {
     width: 36,
     height: 4,
-    backgroundColor: theme.colors.borderGray,
+    backgroundColor: W.goldBorder,
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: theme.spacing.md,
@@ -431,7 +434,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "500",
-    color: theme.colors.textGray,
+    color: W.champagne,
     marginBottom: 8,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -440,17 +443,17 @@ const styles = StyleSheet.create({
     color: theme.colors.error,
   },
   optional: {
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontWeight: "400",
     textTransform: "none",
     letterSpacing: 0,
     fontSize: 12,
   },
   input: {
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     paddingHorizontal: 14,
     paddingVertical: 13,
     fontSize: 16,
@@ -468,7 +471,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 15,
     gap: 8,
@@ -478,7 +481,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveButtonText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 16,
     fontWeight: "700",
   },

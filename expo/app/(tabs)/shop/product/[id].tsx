@@ -17,7 +17,10 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import { ShoppingCart, Car, Check, Zap, Weight, Settings2 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
+import { tick } from '@/utils/tick';
 import { useMutation } from '@tanstack/react-query';
+
+const W = theme.colors.watch;
 
 interface Product {
   category: string;
@@ -158,7 +161,7 @@ export default function ProductDetailScreen() {
       <View style={styles.container}>
         <Stack.Screen options={{ title: 'Loading...' }} />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={theme.colors.white} />
+          <ActivityIndicator size="large" color={W.gold} />
         </View>
       </View>
     );
@@ -242,7 +245,7 @@ export default function ProductDetailScreen() {
                         <TouchableOpacity
                           key={color}
                           style={[styles.optionChip, isSelected && styles.optionChipSelected]}
-                          onPress={() => setSelectedColor(color)}
+                          onPress={() => { tick(); setSelectedColor(color); }}
                           activeOpacity={0.7}
                         >
                           {isSelected && (
@@ -268,7 +271,7 @@ export default function ProductDetailScreen() {
                         <TouchableOpacity
                           key={pkg}
                           style={[styles.packageRow, isSelected && styles.packageRowSelected]}
-                          onPress={() => setSelectedPackage(pkg)}
+                          onPress={() => { tick(); setSelectedPackage(pkg); }}
                           activeOpacity={0.7}
                         >
                           <View style={[styles.packageRadio, isSelected && styles.packageRadioSelected]}>
@@ -407,7 +410,7 @@ export default function ProductDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   center: {
     flex: 1,
@@ -434,7 +437,7 @@ const styles = StyleSheet.create({
   placeholderImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -457,7 +460,7 @@ const styles = StyleSheet.create({
   },
   productCategory: {
     fontSize: 11,
-    color: theme.colors.textGray,
+    color: W.gold,
     letterSpacing: 2,
     fontWeight: '600',
     marginBottom: 6,
@@ -485,8 +488,8 @@ const styles = StyleSheet.create({
   },
   price: {
     fontSize: 34,
-    fontWeight: '700',
-    color: theme.colors.white,
+    fontWeight: '300',
+    color: W.gold,
     letterSpacing: -1,
   },
   stockBadge: {
@@ -518,10 +521,10 @@ const styles = StyleSheet.create({
   specChip: {
     flex: 1,
     minWidth: 90,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 12,
     alignItems: 'center',
     gap: 4,
@@ -534,7 +537,7 @@ const styles = StyleSheet.create({
   },
   specChipLabel: {
     fontSize: 10,
-    color: theme.colors.textGray,
+    color: W.champagne,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -546,7 +549,7 @@ const styles = StyleSheet.create({
   optionLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: theme.colors.textGray,
+    color: W.champagne,
     letterSpacing: 1.5,
     marginBottom: 12,
   },
@@ -563,12 +566,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: theme.borderRadius.full,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
-    backgroundColor: theme.colors.darkGray,
+    borderColor: W.goldBorder,
+    backgroundColor: W.plate,
   },
   optionChipSelected: {
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.white,
+    backgroundColor: W.champagne,
+    borderColor: W.champagne,
   },
   optionChipText: {
     color: theme.colors.white,
@@ -576,7 +579,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   optionChipTextSelected: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontWeight: '700',
   },
   packageList: {
@@ -589,34 +592,34 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
-    backgroundColor: theme.colors.darkGray,
+    borderColor: W.goldBorder,
+    backgroundColor: W.plate,
   },
   packageRowSelected: {
-    borderColor: theme.colors.white,
-    backgroundColor: theme.colors.lightGray,
+    borderColor: W.champagne,
+    backgroundColor: W.plateDark,
   },
   packageRadio: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     justifyContent: 'center',
     alignItems: 'center',
   },
   packageRadioSelected: {
-    borderColor: theme.colors.white,
+    borderColor: W.champagne,
   },
   packageRadioDot: {
     width: 9,
     height: 9,
     borderRadius: 5,
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
   },
   packageName: {
     fontSize: 15,
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontWeight: '500',
   },
   packageNameSelected: {
@@ -624,10 +627,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   summaryBox: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 16,
     marginBottom: 28,
     gap: 10,
@@ -635,7 +638,7 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: theme.colors.textGray,
+    color: W.champagne,
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: 4,
@@ -646,7 +649,7 @@ const styles = StyleSheet.create({
   },
   summaryKey: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   summaryVal: {
     fontSize: 14,
@@ -659,14 +662,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: theme.colors.textGray,
+    color: W.gold,
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: 14,
   },
   description: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
     lineHeight: 22,
   },
   specRow: {
@@ -678,7 +681,7 @@ const styles = StyleSheet.create({
   },
   specLabel: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   specValue: {
     fontSize: 14,
@@ -690,7 +693,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderGray,
     padding: 16,
@@ -710,9 +713,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     gap: 8,
   },
   garageButtonDone: {
@@ -728,12 +731,12 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     justifyContent: 'center',
     alignItems: 'center',
   },
   addToCartButton: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -745,14 +748,14 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   buttonText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 16,
     fontWeight: '700',
   },
   unavailableButton: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     flexDirection: 'row' as const,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
@@ -760,7 +763,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
   },
   unavailableText: {
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontSize: 15,
     fontWeight: '600' as const,
     letterSpacing: 0.3,

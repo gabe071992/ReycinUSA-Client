@@ -8,9 +8,12 @@ import {
   Image,
 } from "react-native";
 import { theme } from "@/constants/theme";
+import { tick } from "@/utils/tick";
 import { Car, Tag, Package, ChevronRight } from "lucide-react-native";
 import { useAuth } from "@/providers/AuthProvider";
 import { router } from "expo-router";
+
+const W = theme.colors.watch;
 
 export default function GarageScreen() {
   const { profile } = useAuth();
@@ -21,7 +24,7 @@ export default function GarageScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {vehicleList.length === 0 ? (
         <View style={styles.emptyState}>
-          <Car size={64} color={theme.colors.textGray} strokeWidth={1} />
+          <Car size={64} color={W.gold} strokeWidth={1} />
           <Text style={styles.emptyTitle}>No Vehicles Yet</Text>
           <Text style={styles.emptyDescription}>
             Browse the shop, configure your Reycin vehicle, and tap "Add to Garage"
@@ -34,7 +37,7 @@ export default function GarageScreen() {
               key={id}
               style={styles.vehicleCard}
               activeOpacity={0.85}
-              onPress={() => router.push(`/garage/${id}` as any)}
+              onPress={() => { tick(); router.push(`/garage/${id}` as any); }}
               testID={`vehicle-card-${id}`}
             >
               {vehicle.image ? (
@@ -45,7 +48,7 @@ export default function GarageScreen() {
                 />
               ) : (
                 <View style={styles.vehicleImagePlaceholder}>
-                  <Car size={40} color={theme.colors.textGray} strokeWidth={1} />
+                  <Car size={40} color={W.gold} strokeWidth={1} />
                 </View>
               )}
 
@@ -122,7 +125,7 @@ export default function GarageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   emptyState: {
     alignItems: "center",
@@ -139,7 +142,7 @@ const styles = StyleSheet.create({
   },
   emptyDescription: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
     textAlign: "center",
     lineHeight: 22,
   },
@@ -148,10 +151,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   vehicleCard: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     overflow: "hidden",
   },
   vehicleImage: {
@@ -161,7 +164,7 @@ const styles = StyleSheet.create({
   vehicleImagePlaceholder: {
     width: "100%",
     height: 140,
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -180,14 +183,14 @@ const styles = StyleSheet.create({
   },
   vehicleNickname: {
     fontSize: 22,
-    fontWeight: "700",
-    color: theme.colors.white,
+    fontWeight: "300",
+    color: W.gold,
     letterSpacing: -0.4,
   },
   vehicleModel: {
     fontSize: 14,
     fontWeight: "400",
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   badgeRow: {
     flexDirection: "row",
@@ -198,12 +201,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderRadius: theme.borderRadius.full,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   badgeAccent: {
     backgroundColor: "rgba(255,255,255,0.08)",
@@ -211,7 +214,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontWeight: "500",
   },
   badgeAccentText: {
@@ -225,7 +228,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   specItem: {
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderRadius: theme.borderRadius.sm,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -238,18 +241,18 @@ const styles = StyleSheet.create({
   specValue: {
     fontSize: 14,
     fontWeight: "700",
-    color: theme.colors.white,
+    color: W.gold,
   },
   specLabel: {
     fontSize: 10,
-    color: theme.colors.textGray,
+    color: W.champagne,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginTop: 2,
   },
   vin: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontFamily: "monospace" as any,
   },
 });

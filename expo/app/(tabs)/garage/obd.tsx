@@ -12,6 +12,8 @@ import { theme } from "@/constants/theme";
 import { Activity, Wifi, Bluetooth, AlertTriangle, Radio, Square } from "lucide-react-native";
 import { useOBD } from "@/providers/OBDProvider";
 
+const W = theme.colors.watch;
+
 export default function VehicleOBDScreen() {
   const { vehicleId, vehicleName } = useLocalSearchParams<{ vehicleId: string; vehicleName: string }>();
   const {
@@ -243,7 +245,7 @@ function TelemetryCell({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   vehicleBanner: {
     flexDirection: "row",
@@ -252,25 +254,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderGray,
+    borderBottomColor: W.goldBorder,
   },
   vehicleBannerText: {
     flex: 1,
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontWeight: "500",
   },
   firmwareText: {
     fontSize: 11,
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontFamily: "monospace" as any,
   },
   statusCard: {
     margin: 16,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 20,
     gap: 16,
   },
@@ -293,14 +295,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
   },
   connectionTypeText: {
     fontSize: 11,
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontWeight: "600",
   },
   telemetryGrid: {
@@ -309,7 +311,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   telemetryCell: {
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderRadius: theme.borderRadius.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -320,23 +322,23 @@ const styles = StyleSheet.create({
   telemetryCellValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: theme.colors.white,
+    color: W.gold,
   },
   telemetryCellLabel: {
     fontSize: 10,
-    color: theme.colors.textGray,
+    color: W.champagne,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginTop: 3,
   },
   connectBtn: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 14,
     alignItems: "center",
   },
   connectBtnText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 14,
     fontWeight: "700",
     letterSpacing: 0.8,
@@ -346,7 +348,7 @@ const styles = StyleSheet.create({
   },
   connectMenuTitle: {
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -356,11 +358,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderRadius: theme.borderRadius.md,
     padding: 14,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   connectOptionText: {
     flex: 1,
@@ -373,7 +375,7 @@ const styles = StyleSheet.create({
   },
   connectOptionSub: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   cancelBtn: {
     alignItems: "center",
@@ -381,11 +383,11 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   disconnectBtn: {
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 12,
     alignItems: "center",
@@ -393,16 +395,16 @@ const styles = StyleSheet.create({
   disconnectBtnText: {
     fontSize: 13,
     fontWeight: "600",
-    color: theme.colors.textGray,
+    color: W.champagne,
     letterSpacing: 0.8,
   },
   sessionCard: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 20,
     gap: 12,
   },
@@ -414,7 +416,7 @@ const styles = StyleSheet.create({
   sessionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: theme.colors.white,
+    color: W.gold,
   },
   recordingBadge: {
     flexDirection: "row",
@@ -438,7 +440,7 @@ const styles = StyleSheet.create({
   },
   sessionSub: {
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     lineHeight: 18,
   },
   sessionBtn: {
@@ -446,7 +448,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 14,
   },
@@ -464,10 +466,10 @@ const styles = StyleSheet.create({
   dtcCard: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 20,
     gap: 12,
   },
@@ -501,7 +503,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   readDtcBtn: {
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
@@ -517,7 +519,7 @@ const styles = StyleSheet.create({
   },
   noDtcText: {
     fontSize: 14,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   dtcList: {
     gap: 8,
@@ -526,7 +528,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderRadius: theme.borderRadius.sm,
     padding: 12,
   },
@@ -540,7 +542,7 @@ const styles = StyleSheet.create({
   dtcDesc: {
     flex: 1,
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   clearDtcBtn: {
     borderWidth: 1,

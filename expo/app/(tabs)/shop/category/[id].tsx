@@ -12,6 +12,9 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { app } from '@/config/firebase';
 import { theme } from '@/constants/theme';
+import { tick } from '@/utils/tick';
+
+const W = theme.colors.watch;
 
 interface Product {
   category: string;
@@ -82,6 +85,7 @@ export default function CategoryScreen() {
   }, [category]);
 
   const handleProductPress = (productId: string) => {
+    tick();
     console.log('Navigating to product:', productId);
     router.push(`/(tabs)/shop/product/${productId}` as any);
   };
@@ -96,7 +100,7 @@ export default function CategoryScreen() {
       <View style={styles.container}>
         <Stack.Screen options={{ title: categoryName || 'Loading...' }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.white} />
+          <ActivityIndicator size="large" color={W.gold} />
           <Text style={styles.loadingText}>Loading products...</Text>
         </View>
       </View>
@@ -171,7 +175,7 @@ export default function CategoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   scrollContent: {
     padding: 20,
@@ -198,7 +202,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptySubtext: {
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontSize: 14,
     marginTop: 5,
   },
@@ -209,12 +213,12 @@ const styles = StyleSheet.create({
   },
   productCard: {
     width: '48%',
-    backgroundColor: theme.colors.darkGray,
-    borderRadius: 12,
+    backgroundColor: W.plate,
+    borderRadius: 18,
     marginBottom: 15,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   productImage: {
     width: '100%',
@@ -224,12 +228,12 @@ const styles = StyleSheet.create({
   placeholderImage: {
     width: '100%',
     height: 150,
-    backgroundColor: '#141414',
+    backgroundColor: W.plateDark,
     justifyContent: 'center',
     alignItems: 'center',
   },
   placeholderText: {
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontSize: 12,
   },
   productInfo: {
@@ -242,17 +246,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   productSubtitle: {
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontSize: 12,
     marginBottom: 8,
   },
   productPrice: {
-    color: theme.colors.white,
+    color: W.gold,
     fontSize: 16,
     fontWeight: '700',
   },
   stockText: {
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontSize: 11,
     marginTop: 4,
   },
@@ -282,6 +286,6 @@ const styles = StyleSheet.create({
     color: '#34C759',
   },
   availBadgeTextOff: {
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
 });

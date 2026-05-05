@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { theme } from "@/constants/theme";
+import { tick } from "@/utils/tick";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Vehicle, EngineConfig, RepairEntry, DamageReport, Booking } from "@/providers/AuthProvider";
 import {
@@ -35,6 +36,8 @@ import {
   ExternalLink,
 } from "lucide-react-native";
 
+const W = theme.colors.watch;
+
 type Section = "overview" | "engine" | "service" | "damage" | "bookings";
 
 const SECTIONS: { key: Section; label: string; icon: any }[] = [
@@ -49,11 +52,11 @@ function SectionPill({ section, active, onPress }: { section: typeof SECTIONS[0]
   const Icon = section.icon;
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={() => { tick(); onPress(); }}
       style={[styles.pill, active && styles.pillActive]}
       activeOpacity={0.75}
     >
-      <Icon size={13} color={active ? theme.colors.black : theme.colors.textGray} strokeWidth={2} />
+      <Icon size={13} color={active ? W.deepBlack : W.champagne} strokeWidth={2} />
       <Text style={[styles.pillText, active && styles.pillTextActive]}>{section.label}</Text>
     </TouchableOpacity>
   );
@@ -779,21 +782,21 @@ function FormField({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   notFound: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
     gap: 12,
   },
   notFoundText: {
-    color: theme.colors.textGray,
+    color: W.champagne,
     fontSize: 16,
   },
   heroSection: {
@@ -807,7 +810,7 @@ const styles = StyleSheet.create({
   heroPlaceholder: {
     width: "100%",
     height: "100%",
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -822,9 +825,9 @@ const styles = StyleSheet.create({
     right: 20,
   },
   heroNickname: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: theme.colors.white,
+    fontSize: 30,
+    fontWeight: "300",
+    color: W.gold,
     letterSpacing: -0.5,
   },
   heroModel: {
@@ -847,9 +850,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   stickyHeader: {
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderGray,
+    borderBottomColor: W.goldBorder,
     paddingVertical: 12,
   },
   pillsRow: {
@@ -864,21 +867,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   pillActive: {
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.white,
+    backgroundColor: W.champagne,
+    borderColor: W.champagne,
   },
   pillText: {
     fontSize: 13,
     fontWeight: "500",
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   pillTextActive: {
-    color: theme.colors.black,
+    color: W.deepBlack,
   },
   sectionBody: {
     padding: 16,
@@ -891,10 +894,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 16,
   },
   actionBtnText: {
@@ -904,10 +907,10 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
   },
   card: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 16,
     gap: 12,
   },
@@ -918,8 +921,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.textGray,
+    fontWeight: "700",
+    color: W.gold,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -928,7 +931,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   specCell: {
-    backgroundColor: theme.colors.lightGray,
+    backgroundColor: W.plateDark,
     borderRadius: theme.borderRadius.sm,
     padding: 12,
     alignItems: "center",
@@ -942,7 +945,7 @@ const styles = StyleSheet.create({
   },
   specCellLabel: {
     fontSize: 10,
-    color: theme.colors.textGray,
+    color: W.champagne,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -955,11 +958,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderGray,
+    borderBottomColor: W.goldBorder,
   },
   detailLabel: {
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     flex: 1,
   },
   detailValue: {
@@ -995,19 +998,19 @@ const styles = StyleSheet.create({
   },
   emptySectionSub: {
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     textAlign: "center",
     lineHeight: 20,
   },
   addInlineBtn: {
     marginTop: 12,
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: theme.borderRadius.full,
   },
   addInlineBtnText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -1015,30 +1018,30 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.04)",
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 16,
     gap: 8,
   },
   infoCardTitle: {
     fontSize: 13,
-    fontWeight: "600",
-    color: theme.colors.textGray,
+    fontWeight: "700",
+    color: W.gold,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   infoCardBody: {
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     lineHeight: 20,
   },
   entryList: {
     gap: 10,
   },
   entryCard: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     padding: 14,
     gap: 6,
   },
@@ -1118,7 +1121,7 @@ const styles = StyleSheet.create({
   },
   entryDate: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   deleteBtn: {
     padding: 4,
@@ -1130,7 +1133,7 @@ const styles = StyleSheet.create({
   },
   entryDesc: {
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     lineHeight: 18,
   },
   entryMeta: {
@@ -1140,20 +1143,20 @@ const styles = StyleSheet.create({
   },
   entryMetaText: {
     fontSize: 12,
-    color: theme.colors.textGray,
+    color: W.champagne,
   },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 14,
     marginTop: 4,
   },
   addButtonText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1175,7 +1178,7 @@ const styles = StyleSheet.create({
   },
   modal: {
     flex: 1,
-    backgroundColor: theme.colors.black,
+    backgroundColor: W.deepBlack,
   },
   modalHeader: {
     flexDirection: "row",
@@ -1184,7 +1187,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 24,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderGray,
+    borderBottomColor: W.goldBorder,
   },
   modalTitle: {
     fontSize: 18,
@@ -1197,7 +1200,7 @@ const styles = StyleSheet.create({
   },
   modalHint: {
     fontSize: 13,
-    color: theme.colors.textGray,
+    color: W.champagne,
     marginBottom: 20,
     lineHeight: 18,
   },
@@ -1205,7 +1208,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.borderGray,
+    borderTopColor: W.goldBorder,
   },
   formField: {
     marginBottom: 20,
@@ -1214,15 +1217,15 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: theme.colors.textGray,
+    color: W.champagne,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 4,
   },
   fieldInput: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
     borderRadius: theme.borderRadius.md,
     padding: 14,
     fontSize: 15,
@@ -1236,7 +1239,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   saveBtn: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: W.champagne,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 16,
     alignItems: "center",
@@ -1245,7 +1248,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   saveBtnText: {
-    color: theme.colors.black,
+    color: W.deepBlack,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -1259,21 +1262,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
     borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: W.plate,
     borderWidth: 1,
-    borderColor: theme.colors.borderGray,
+    borderColor: W.goldBorder,
   },
   toggleActive: {
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.white,
+    backgroundColor: W.champagne,
+    borderColor: W.champagne,
   },
   toggleText: {
     fontSize: 13,
     fontWeight: "500",
-    color: theme.colors.textGray,
+    color: W.champagne,
     textTransform: "capitalize",
   },
   toggleTextActive: {
-    color: theme.colors.black,
+    color: W.deepBlack,
   },
 });
