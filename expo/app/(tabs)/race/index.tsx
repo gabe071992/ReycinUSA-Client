@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Pressable,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import LeafletMapView, { LeafletMapHandle } from "@/components/LeafletMapView";
 import * as Location from "expo-location";
 import {
@@ -47,6 +48,10 @@ import { usePIT } from "@/providers/PITProvider";
 import type { MsgPriority, PitLogType } from "@/providers/PITProvider";
 import { useTracks } from "@/providers/TracksProvider";
 import type { Track, TrackCoordinate, TrackWaypoint } from "@/providers/TracksProvider";
+import { theme } from "@/constants/theme";
+import { tick } from "@/utils/tick";
+
+const W = theme.colors.watch;
 
 type RaceTab = "dash" | "timer" | "tracks" | "tuning" | "pit" | "league";
 
@@ -732,15 +737,15 @@ function TracksScreen({
   return (
     <View style={tracksStyles.root}>
       <View style={tracksStyles.segmentBar}>
-        <TouchableOpacity style={[tracksStyles.segment, listMode === "known" && tracksStyles.segmentActive]} onPress={() => setListMode("known")} activeOpacity={0.7}>
+        <TouchableOpacity style={[tracksStyles.segment, listMode === "known" && tracksStyles.segmentActive]} onPress={() => { tick(); setListMode("known"); }} activeOpacity={0.7}>
           <Text style={[tracksStyles.segmentText, listMode === "known" && tracksStyles.segmentTextActive]}>LIBRARY</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[tracksStyles.segment, listMode === "mine" && tracksStyles.segmentActive]} onPress={() => setListMode("mine")} activeOpacity={0.7}>
+        <TouchableOpacity style={[tracksStyles.segment, listMode === "mine" && tracksStyles.segmentActive]} onPress={() => { tick(); setListMode("mine"); }} activeOpacity={0.7}>
           <Text style={[tracksStyles.segmentText, listMode === "mine" && tracksStyles.segmentTextActive]}>
             MY TRACKS{userTracks.length > 0 && <Text style={tracksStyles.countBadge}> {userTracks.length}</Text>}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[tracksStyles.segment, listMode === "rplus" && tracksStyles.segmentActive]} onPress={() => setListMode("rplus")} activeOpacity={0.7}>
+        <TouchableOpacity style={[tracksStyles.segment, listMode === "rplus" && tracksStyles.segmentActive]} onPress={() => { tick(); setListMode("rplus"); }} activeOpacity={0.7}>
           <Text style={[tracksStyles.segmentText, listMode === "rplus" && tracksStyles.segmentTextActive, listMode === "rplus" && tracksStyles.segmentTextRPlus]}>R+</Text>
         </TouchableOpacity>
       </View>
@@ -3378,6 +3383,18 @@ export default function RaceScreen() {
 
   return (
     <View style={mainStyles.root}>
+      <LinearGradient colors={["#050505", W.deepBlack, "#000000"]} style={StyleSheet.absoluteFillObject} />
+      <View style={mainStyles.gearGhostLarge} />
+      <View style={mainStyles.gearGhostSmall} />
+      <View style={mainStyles.raceHeader}>
+        <View>
+          <Text style={mainStyles.eyebrow}>REYCIN RACEWORKS</Text>
+          <Text style={mainStyles.title}>Mechanical Telemetry</Text>
+        </View>
+        <View style={mainStyles.crown}>
+          <Text style={mainStyles.crownText}>R</Text>
+        </View>
+      </View>
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -3391,7 +3408,7 @@ export default function RaceScreen() {
             <TouchableOpacity
               key={tab.id}
               style={[mainStyles.tab, isActive && mainStyles.tabActive]}
-              onPress={() => setActiveTab(tab.id)}
+              onPress={() => { tick(); setActiveTab(tab.id); }}
               activeOpacity={0.7}
               testID={`race-tab-${tab.id}`}
             >
@@ -3427,41 +3444,112 @@ const mainStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
+  gearGhostLarge: {
+    position: "absolute",
+    top: -86,
+    right: -74,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    borderWidth: 18,
+    borderColor: W.goldDim,
+    opacity: 0.32,
+  },
+  gearGhostSmall: {
+    position: "absolute",
+    top: 86,
+    left: -52,
+    width: 134,
+    height: 134,
+    borderRadius: 67,
+    borderWidth: 12,
+    borderColor: W.goldBorder,
+    opacity: 0.26,
+  },
+  raceHeader: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: W.goldBorder,
+  },
+  eyebrow: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: W.gold,
+    letterSpacing: 2.4,
+  },
+  title: {
+    marginTop: 4,
+    fontSize: 24,
+    fontWeight: "300",
+    color: W.champagne,
+    letterSpacing: 0.4,
+  },
+  crown: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: W.goldBorder,
+    backgroundColor: "rgba(201,168,76,0.07)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crownText: {
+    color: W.gold,
+    fontSize: 18,
+    fontWeight: "300",
+    letterSpacing: 1,
+  },
   tabBar: {
     flexGrow: 0,
     borderBottomWidth: 1,
-    borderBottomColor: "#111",
+    borderBottomColor: W.goldBorder,
+    backgroundColor: "rgba(5,5,5,0.72)",
   },
   tabBarContent: {
     flexDirection: "row",
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 8,
   },
   tab: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
     alignItems: "center",
     position: "relative",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(17,17,17,0.72)",
   },
-  tabActive: {},
+  tabActive: {
+    borderColor: W.goldBorder,
+    backgroundColor: W.goldGlow,
+  },
   tabText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#333",
+    fontSize: 10,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.34)",
     letterSpacing: 1.5,
   },
   tabTextActive: {
-    color: "#FFF",
+    color: W.champagne,
   },
   tabIndicator: {
     position: "absolute",
-    bottom: 0,
-    left: 12,
-    right: 12,
+    bottom: 4,
+    width: 18,
     height: 2,
-    backgroundColor: "#FF1801",
+    backgroundColor: W.gold,
     borderRadius: 1,
   },
   content: {
     flex: 1,
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
 });

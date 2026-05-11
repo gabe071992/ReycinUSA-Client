@@ -645,7 +645,7 @@ export default function RPlusScreen() {
 
         {isDataLoading && (
           <View style={styles.loadingOverlay} pointerEvents="none">
-            <ActivityIndicator size="large" color="#FF1801" />
+            <ActivityIndicator size="large" color="#C9A84C" />
             <Text style={styles.loadingText}>
               {parksQuery.isLoading
                 ? "LOADING PARKS"
@@ -669,14 +669,19 @@ export default function RPlusScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#080808",
+    backgroundColor: "#050505",
+    borderWidth: 1,
+    borderColor: "rgba(201,168,76,0.18)",
+    borderRadius: 18,
+    margin: 10,
+    overflow: "hidden",
   },
   parkBar: {
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#111",
-    backgroundColor: "#000",
+    borderBottomColor: "rgba(201,168,76,0.18)",
+    backgroundColor: "#0A0A0A",
     minHeight: 44,
   },
   parkBarLoading: {
@@ -702,23 +707,23 @@ const styles = StyleSheet.create({
   parkChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 5,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#1a1a1a",
-    backgroundColor: "#0a0a0a",
+    borderColor: "rgba(201,168,76,0.18)",
+    backgroundColor: "rgba(201,168,76,0.06)",
   },
   parkChipActive: {
-    borderColor: "#FF1801",
-    backgroundColor: "rgba(255,24,1,0.08)",
+    borderColor: "#C9A84C",
+    backgroundColor: "rgba(201,168,76,0.14)",
   },
   parkChipText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#444",
+    color: "rgba(232,213,160,0.42)",
     letterSpacing: 1.5,
   },
   parkChipTextActive: {
-    color: "#FF1801",
+    color: "#E8D5A0",
   },
   resetBtn: {
     width: 40,
@@ -732,6 +737,12 @@ const styles = StyleSheet.create({
   viewport: {
     flex: 1,
     position: "relative",
+    margin: 10,
+    borderRadius: 999,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(201,168,76,0.25)",
+    backgroundColor: "#050505",
   },
   webview: {
     flex: 1,
